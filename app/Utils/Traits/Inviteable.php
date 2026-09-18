@@ -1,16 +1,22 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Utils\Traits;
 
+use App\Utils\Ninja;
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer;
 use Illuminate\Support\Str;
 
 /**
@@ -23,7 +29,7 @@ trait Inviteable
      *
      * @return     string  The status.
      */
-    public function getStatus() :string
+    public function getStatus(): string
     {
         $status = '';
 
@@ -42,22 +48,94 @@ trait Inviteable
         return $status;
     }
 
-    public function getLink() :string
+    public function getPaymentLink()
+    {
+
+        if (Ninja::isHosted()) {
+            /**@var \App\Models\Company $company */
+            $domain = $this->company->domain();
+        } else {
+            $domain = config('ninja.app_url');
+        }
+
+        return $domain . '/client/pay/' . $this->key;
+    }
+
+    public function getPaymentQrCode()
+    {
+        return htmlentities(
+            sprintf('<div>%s</div>', $this->getPaymentQrCodeRaw())
+        );
+    }
+
+    public function getPaymentQrCodeRaw()
+    {
+
+        $renderer = new ImageRenderer(
+            new RendererStyle(150, margin: 0),
+            new SvgImageBackEnd()
+        );
+        $writer = new Writer($renderer);
+
+        $qr = $writer->writeString($this->getPaymentLink(), 'utf-8');
+
+        return $qr;
+
+    }
+
+    /**
+     * stubbed for future when we want to change from svg to png qrcodes.
+     */
+    // public function getPaymentQrCodeRawPng()
+    // {
+
+    //     $result = \Endroid\QrCode\Builder\Builder::create()
+    //         ->writer(new \Endroid\QrCode\Writer\PngWriter())
+    //         ->data($this->getPaymentLink())
+    //         ->encoding(new \Endroid\QrCode\Encoding\Encoding('UTF-8'))
+    //         ->errorCorrectionLevel(\Endroid\QrCode\ErrorCorrectionLevel::Medium)
+    //         ->size(150)
+    //         ->margin(0)
+    //         ->build();
+
+    //     $png = base64_encode($result->getString());
+
+    //     return '<img src="data:image/png;base64,' . $png . '" alt="QR Code" />';
+
+    // }
+
+    public function getUnsubscribeLink()
+    {
+        if (Ninja::isHosted()) {
+            $domain = $this->company->domain();
+        } else {
+            $domain = strlen($this->company->portal_domain ?? '') > 5 ? $this->company->portal_domain : config('ninja.app_url');
+        }
+
+        $entity_type = Str::snake(class_basename($this->entityType()));
+
+        return $domain . '/client/unsubscribe/' . $entity_type . '/' . $this->key;
+    }
+
+    public function getLink(): string
     {
         $entity_type = Str::snake(class_basename($this->entityType()));
 
-        $domain = isset($this->company->portal_domain) ?: $this->company->domain();
+        if (Ninja::isHosted()) {
+            $domain = $this->company->domain();
+        } else {
+            $domain = strlen($this->company->portal_domain ?? '') > 5 ? $this->company->portal_domain : config('ninja.app_url');
+        }
 
         switch ($this->company->portal_mode) {
             case 'subdomain':
-                return $domain.'client/'.$entity_type.'/'.$this->key;
+                return $domain . '/client/' . $entity_type . '/' . $this->key;
                 break;
             case 'iframe':
-                return $domain.'client/'.$entity_type.'/'.$this->key;
-                //return $domain . $entity_type .'/'. $this->contact->client->client_hash .'/'. $this->key;
+                return $domain . '/client/' . $entity_type . '/' . $this->key;
                 break;
             case 'domain':
-                return $domain.'client/'.$entity_type.'/'.$this->key;
+                return $domain . '/client/' . $entity_type . '/' . $this->key;
                 break;
 
             default:
@@ -66,8 +144,40 @@ trait Inviteable
         }
     }
 
-    public function getAdminLink() :string
+    public function getPortalLink(): string
     {
-        return $this->getLink().'?silent=true';
+        if (Ninja::isHosted()) {
+            $domain = $this->company->domain();
+        } else {
+            $domain = strlen($this->company->portal_domain ?? '') > 5 ? $this->company->portal_domain : config('ninja.app_url');
+        }
+
+        switch ($this->company->portal_mode) {
+            case 'subdomain':
+                return $domain . '/client/';
+                break;
+            case 'iframe':
+                return $domain . '/client/';
+                break;
+            case 'domain':
+                return $domain . '/client/';
+                break;
+
+            default:
+                return '';
+                break;
+        }
+    }
+
+    public function getAdminLink($use_react_link = false): string
+    {
+        return $use_react_link ? $this->getReactLink() : $this->getLink() . '?silent=true';
+    }
+
+    private function getReactLink(): string
+    {
+        $entity_type = Str::snake(class_basename($this->entityType()));
+
+        return config('ninja.react_url') . "/#/{$entity_type}s/{$this->{$entity_type}->hashed_id}/edit";
     }
 }

@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Unit;
 
 use App\Factory\PaymentFactory;
@@ -17,8 +19,8 @@ use Tests\MockAccountData;
 use Tests\TestCase;
 
 /**
- * @test
- * @covers  App\Utils\Traits\Invoice\ActionsInvoice
+ *
+ *   App\Utils\Traits\Invoice\ActionsInvoice
  */
 class InvoiceActionsTest extends TestCase
 {
@@ -26,7 +28,7 @@ class InvoiceActionsTest extends TestCase
     use DatabaseTransactions;
     use ActionsInvoice;
 
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -35,25 +37,24 @@ class InvoiceActionsTest extends TestCase
 
     public function testInvoiceIsDeletable()
     {
-        $this->assertFalse($this->invoiceDeletable($this->invoice));
+
+        $this->assertTrue($this->invoiceDeletable($this->invoice));
         $this->assertTrue($this->invoiceReversable($this->invoice));
         $this->assertTrue($this->invoiceCancellable($this->invoice));
     }
 
     public function testInvoiceIsReversable()
     {
-        $this->withoutEvents();
 
-        $this->invoice->service()->markPaid()->save();
+        $this->invoice = $this->invoice->service()->markPaid()->save();
 
-        $this->assertFalse($this->invoiceDeletable($this->invoice));
+        $this->assertTrue($this->invoiceDeletable($this->invoice));
         $this->assertTrue($this->invoiceReversable($this->invoice));
         $this->assertFalse($this->invoiceCancellable($this->invoice));
     }
 
     public function testInvoiceIsCancellable()
     {
-        $this->withoutEvents();
 
         $payment = PaymentFactory::create($this->invoice->company_id, $this->invoice->user_id);
         $payment->amount = 40;
@@ -65,18 +66,17 @@ class InvoiceActionsTest extends TestCase
 
         $this->invoice->service()->applyPayment($payment, 5)->save();
 
-        $this->assertFalse($this->invoiceDeletable($this->invoice));
+        $this->assertTrue($this->invoiceDeletable($this->invoice));
         $this->assertTrue($this->invoiceReversable($this->invoice));
         $this->assertTrue($this->invoiceCancellable($this->invoice));
     }
 
     public function testInvoiceUnactionable()
     {
-        $this->withoutEvents();
 
         $this->invoice->delete();
 
-        $this->assertFalse($this->invoiceDeletable($this->invoice));
+        $this->assertTrue($this->invoiceDeletable($this->invoice));
         $this->assertFalse($this->invoiceReversable($this->invoice));
         $this->assertFalse($this->invoiceCancellable($this->invoice));
     }

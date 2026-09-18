@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Jobs\Util;
@@ -24,12 +25,17 @@ use Intervention\Image\ImageManager;
 
 class UploadFile implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, MakesHash;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
+    use MakesHash;
 
-    const IMAGE = 1;
-    const DOCUMENT = 2;
+    public const IMAGE = 1;
 
-    const PROPERTIES = [
+    public const DOCUMENT = 2;
+
+    public const PROPERTIES = [
         self::IMAGE => [
             'path' => 'images',
         ],
@@ -39,14 +45,20 @@ class UploadFile implements ShouldQueue
     ];
 
     protected $file;
+
     protected $user;
+
     protected $company;
+
     protected $type;
+
     protected $is_public;
 
     public $entity;
 
-    public function __construct($file, $type, $user, $company, $entity, $disk = null, $is_public = false)
+    public $disk;
+
+    public function __construct($file, $type, $user, $company, $entity, $disk = null, $is_public = true)
     {
         $this->file = $file;
         $this->type = $type;
@@ -64,8 +76,12 @@ class UploadFile implements ShouldQueue
      *
      * @return Document|null
      */
-    public function handle() : ?Document
+    public function handle(): ?Document
     {
+        if (is_array($this->file)) { //return early if the payload is just JSON
+            return null;
+        }
+
         $path = self::PROPERTIES[$this->type]['path'];
 
         if ($this->company) {
@@ -89,13 +105,14 @@ class UploadFile implements ShouldQueue
         $document->user_id = $this->user->id;
         $document->company_id = $this->company->id;
         $document->url = $instance;
-        $document->name = $this->file->getClientOriginalName();
+        $document->name = $this->sanitizeFileName($this->file->getClientOriginalName());
+        // $document->name = str_replace("/", "-", $this->file->getClientOriginalName());
         $document->type = $this->file->extension();
         $document->disk = $this->disk;
         $document->hash = $this->file->hashName();
         $document->size = $this->file->getSize();
-        $document->width = isset($width) ? $width : null;
-        $document->height = isset($height) ? $height : null;
+        $document->width = $width ?? null;
+        $document->height = $height ?? null;
         $document->is_public = $this->is_public;
 
         // $preview_path = $this->encodePrimaryKey($this->company->id);
@@ -106,7 +123,15 @@ class UploadFile implements ShouldQueue
         return $document;
     }
 
-    private function generatePreview($preview_path) : string
+    private function sanitizeFileName(string $name): string
+    {
+        $name = str_replace(['/', '\\'], '_', $name);
+        $name = preg_replace('/[<>:"|?*\x00-\x1F]/', '_', $name);
+        $name = str_replace('..', '_', $name);
+        return trim($name, '. ');
+    }
+
+    private function generatePreview($preview_path): string
     {
         $extension = $this->file->getClientOriginalExtension();
 
@@ -158,7 +183,7 @@ class UploadFile implements ShouldQueue
                     $previewHeight = $height * Document::DOCUMENT_PREVIEW_SIZE / $width;
                 } else {
                     $previewHeight = Document::DOCUMENT_PREVIEW_SIZE;
-                    $previewWidth = $width * DOCUMENT_PREVIEW_SIZE / $height;
+                    $previewWidth = $width * Document::DOCUMENT_PREVIEW_SIZE / $height;
                 }
 
                 $img->resize($previewWidth, $previewHeight);
@@ -172,5 +197,10 @@ class UploadFile implements ShouldQueue
         }
 
         return $preview;
+    }
+
+    public function failed(\Throwable $exception)
+    {
+        nlog('UploadFile failed: ' . $exception->getMessage());
     }
 }

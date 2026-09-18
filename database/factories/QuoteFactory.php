@@ -4,24 +4,19 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Database\Factories;
 
+use App\Factory\InvoiceItemFactory;
 use App\Models\Quote;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class QuoteFactory extends Factory
 {
-    /**
-     * The name of the factory's corresponding model.
-     *
-     * @var string
-     */
-    protected $model = Quote::class;
-
     /**
      * Define the model's default state.
      *
@@ -45,7 +40,7 @@ class QuoteFactory extends Factory
             // 'custom_value4' => $this->faker->numberBetween(1, 4),
             'is_deleted' => false,
             'po_number' => $this->faker->text(10),
-            'line_items' => false,
+            'line_items' => InvoiceItemFactory::generate(5),
         ];
     }
 }

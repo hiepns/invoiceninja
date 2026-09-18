@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Listeners\Activity;
@@ -43,13 +44,15 @@ class ExpenseArchivedActivity implements ShouldQueue
 
         $expense = $event->expense;
 
-        $fields = new stdClass;
+        $fields = new stdClass();
+
+        $user_id = $event->event_vars['user_id'] ?? $event->expense->user_id;
 
         $fields->expense_id = $expense->id;
-        $fields->user_id = $expense->user_id;
+        $fields->user_id = $user_id;
         $fields->company_id = $expense->company_id;
         $fields->activity_type_id = Activity::ARCHIVE_EXPENSE;
-        
+
         $this->activity_repo->save($fields, $expense, $event->event_vars);
     }
 }

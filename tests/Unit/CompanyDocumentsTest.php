@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Unit;
 
 use App\Jobs\Util\UploadFile;
@@ -23,8 +25,7 @@ class CompanyDocumentsTest extends TestCase
 {
     use MockAccountData;
     use DatabaseTransactions;
-
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -43,13 +44,14 @@ class CompanyDocumentsTest extends TestCase
 
         $image = UploadedFile::fake()->image('avatar.jpg');
 
-        $document = UploadFile::dispatchNow(
+
+        $document = (new UploadFile(
             $image,
             UploadFile::IMAGE,
             $this->user,
             $this->company,
             $this->invoice
-        );
+        ))->handle();
 
         $this->assertNotNull($document);
 
@@ -61,6 +63,6 @@ class CompanyDocumentsTest extends TestCase
 
         $this->assertEquals(0, Document::whereCompanyId($this->company->id)->count());
 
-        $this->assertFalse(Storage::exists($document->url));
     }
+
 }

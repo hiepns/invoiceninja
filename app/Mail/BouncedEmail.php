@@ -1,33 +1,24 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Mail;
 
-use App\Models\User;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
-use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\App;
 
-class BouncedEmail extends Mailable implements ShouldQueue
+class BouncedEmail extends Mailable
 {
-    use Queueable, SerializesModels;
-
     public $invitation;
 
-    /**
-     * Create a new message instance.
-     *
-     * @param $invitation
-     */
     public function __construct($invitation)
     {
         $this->invitation = $invitation;
@@ -40,30 +31,15 @@ class BouncedEmail extends Mailable implements ShouldQueue
      */
     public function build()
     {
-        $entity_type = class_basename(lcfirst($this->invitation->getEntityType()));
+        App::setLocale($this->invitation->company->getLocale());
 
-        $subject = ctrans("texts.notification_{$entity_type}_bounced_subject", ['invoice' => $invoice->number]);
-        
+        $entity_type = class_basename(lcfirst($this->invitation->getEntityType() ?? ''));
+
+        $subject = ctrans("texts.notification_{$entity_type}_bounced_subject", ['invoice' => $this->invitation->invoice->number]);
+
         return
-            $this->from(config('mail.from.name'), config('mail.from.address'))
-                ->text()
+            $this->from(config('mail.from.address'), config('mail.from.name'))
+                ->text('bounced mail')
                 ->subject($subject);
-
-        //todo
-/*
-
-
-            //todo determine WHO is notified!! In this instance the _user_ is notified
-
-            Mail::to($invitation->user->email)
-            //->cc('')
-            //->bcc('')
-            ->queue(new BouncedEmail($invitation));
-
-        return $this->from('x@gmail.com') //todo
-            ->subject(ctrans('texts.confirmation_subject'))
-            ->markdown('email.auth.verify', ['user' => $this->user])
-            ->text('email.auth.verify_text');
-*/
     }
 }

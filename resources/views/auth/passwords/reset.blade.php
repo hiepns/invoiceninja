@@ -9,9 +9,10 @@
                 <div class="card-group">
                     <div class="card p-4">
                         <div class="card-body">
+                            
                                 <form method="POST" action="{{ route('password.update') }}">
                                 @csrf
-                                        <input type="hidden" name="token" value="{{ $token }}">
+                                <input type="hidden" name="token" value="{{ $token }}">
                                 <h1>trans('texts.change_password')</h1>
                                 <p class="text-muted"></p>
                                 <div class="input-group mb-3">

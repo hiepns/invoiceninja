@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Listeners\Activity;
@@ -41,14 +42,16 @@ class CreditArchivedActivity implements ShouldQueue
     {
         MultiDB::setDb($event->company->db);
 
-        $fields = new stdClass;
+        $fields = new stdClass();
 
-        $fields->payment_id = $event->credit->id;
+        $user_id = $event->event_vars['user_id'] ?? $event->credit->user_id;
+
+        $fields->credit_id = $event->credit->id;
         $fields->client_id = $event->credit->client_id;
-        $fields->user_id = $event->credit->user_id;
+        $fields->user_id = $user_id;
         $fields->company_id = $event->credit->company_id;
         $fields->activity_type_id = Activity::ARCHIVE_CREDIT;
 
-        $this->activity_repo->save($fields, $$event->credit, $event->event_vars);
+        $this->activity_repo->save($fields, $event->credit, $event->event_vars);
     }
 }

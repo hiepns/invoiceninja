@@ -1,22 +1,26 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\User;
 
-use App\DataMapper\DefaultSettings;
 use App\Factory\UserFactory;
 use App\Http\Requests\Request;
+use App\Http\ValidationRules\Ninja\CanAddUserRule;
+use App\Http\ValidationRules\User\AttachableUser;
+use App\Http\ValidationRules\User\HasValidPhoneNumber;
 use App\Http\ValidationRules\ValidUserForCompany;
 use App\Libraries\MultiDB;
 use App\Models\User;
+use App\Utils\Ninja;
 
 class StoreUserRequest extends Request
 {
@@ -25,32 +29,47 @@ class StoreUserRequest extends Request
      *
      * @return bool
      */
-    public function authorize() : bool
+    public function authorize(): bool
     {
-        return auth()->user()->isAdmin();
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return $user->isAdmin();
     }
 
     public function rules()
     {
         $rules = [];
 
-        $rules['first_name'] = 'required|string|max:100';
-        $rules['last_name'] = 'required|string|max:100';
+        $rules['first_name'] = 'required|bail|string|max:100';
+        $rules['last_name'] = 'required|bail|string|max:100';
 
         if (config('ninja.db.multi_db_enabled')) {
-            $rules['email'] = new ValidUserForCompany();
+            $rules['email'] = ['required', 'bail', 'email', new ValidUserForCompany(), new AttachableUser()];
+        } else {
+            $rules['email'] = ['required', 'bail', 'email', new AttachableUser()];
         }
 
-        if (auth()->user()->company()->account->isFreeHostedClient()) {
-            $rules['hosted_users'] = new CanAddUserRule(auth()->user()->company()->account);
+        if (Ninja::isHosted()) {
+            $rules['id'] = new CanAddUserRule();
+
+            if ($this->phone && isset($this->phone)) {
+                $rules['phone'] = ['bail', 'string', 'sometimes', new HasValidPhoneNumber()];
+            }
         }
+
+        $rules['language_id'] = 'bail|nullable|sometimes|exists:languages,id';
 
         return $rules;
     }
 
-    protected function prepareForValidation()
+    public function prepareForValidation()
     {
         $input = $this->all();
+
+        if (array_key_exists('email', $input)) {
+            $input['email'] = trim($input['email']);
+        }
 
         if (isset($input['company_user'])) {
             if (! isset($input['company_user']['is_admin'])) {
@@ -62,22 +81,29 @@ class StoreUserRequest extends Request
             }
 
             if (! isset($input['company_user']['settings'])) {
-                //$input['company_user']['settings'] = DefaultSettings::userSettings();
                 $input['company_user']['settings'] = null;
             }
         } else {
             $input['company_user'] = [
-                //'settings' => DefaultSettings::userSettings(),
                 'settings' => null,
                 'permissions' => '',
             ];
         }
 
+        if (array_key_exists('first_name', $input)) {
+            $input['first_name'] = strip_tags($input['first_name']);
+        }
+
+        if (array_key_exists('last_name', $input)) {
+            $input['last_name'] = strip_tags($input['last_name']);
+        }
+
+        $input['id'] = null;
+
         $this->replace($input);
     }
 
-    //@todo make sure the user links back to the account ID for this company!!!!!!
-    public function fetchUser() :User
+    public function fetchUser(): User
     {
         $user = MultiDB::hasUser(['email' => $this->input('email')]);
 

@@ -1,22 +1,26 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Models\Presenters;
 
 use App\Utils\Traits\MakesHash;
 use Laracasts\Presenter\Presenter;
-use URL;
 
 /**
  * Class EntityPresenter.
+ *
+ * @property \App\Models\Company | \App\Models\Client | \App\Models\ClientContact | \App\Models\Vendor | \App\Models\VendorContact $entity
+ * @property \App\Models\Client $client
+ * @property \App\Models\Company $company
  */
 class EntityPresenter extends Presenter
 {
@@ -30,43 +34,27 @@ class EntityPresenter extends Presenter
         return $this->encodePrimaryKey($this->entity->id);
     }
 
-    public function url()
-    {
-    }
+    public function url() {}
 
-    public function path()
-    {
-    }
+    public function path() {}
 
-    public function editUrl()
-    {
-    }
+    public function editUrl() {}
 
     /**
      * @param bool $label
      */
-    public function statusLabel($label = false)
-    {
-    }
+    public function statusLabel($label = false) {}
 
-    public function statusColor()
-    {
-    }
+    public function statusColor() {}
 
-    public function link()
-    {
-    }
+    public function link() {}
 
-    public function titledName()
-    {
-    }
+    public function titledName() {}
 
     /**
      * @param bool $subColors
      */
-    public function calendarEvent($subColors = false)
-    {
-    }
+    public function calendarEvent($subColors = false) {}
 
     public function getCityState()
     {
@@ -84,14 +72,14 @@ class EntityPresenter extends Presenter
         }
     }
 
-    public function getShippingCityState()
+    public function getShippingCityState($printCity = true, $printState = true, $printPostalCode = true)
     {
         $client = $this->entity;
         $swap = $client->shipping_country && $client->shipping_country->swap_postal_code;
 
-        $city = e($client->shipping_city);
-        $state = e($client->shipping_state);
-        $postalCode = e($client->shipping_postal_code);
+        $city = ($printCity) ? e($client->shipping_city) : null;
+        $state = ($printState) ? e($client->shipping_state) : null;
+        $postalCode = ($printPostalCode) ? e($client->shipping_postal_code) : null;
 
         if ($city || $state || $postalCode) {
             return $this->cityStateZip($city, $state, $postalCode, $swap);
@@ -112,9 +100,9 @@ class EntityPresenter extends Presenter
         }
 
         if ($swap) {
-            return $postalCode.' '.$str;
+            return $postalCode . ' ' . $str;
         } else {
-            return $str.' '.$postalCode;
+            return $str . ' ' . $postalCode;
         }
     }
 

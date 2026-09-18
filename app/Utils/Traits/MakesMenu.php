@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Utils\Traits;
@@ -23,14 +24,14 @@ trait MakesMenu
      * @param  string $entity Class name
      * @return array of modules
      */
-    public function makeEntityTabMenu(string $entity) : array
+    public function makeEntityTabMenu(string $entity): array
     {
         $tabs = [];
 
         foreach (Module::getCached() as $module) {
             if (! $module['sidebar']
-                && $module['active'] == 1
-                && in_array(strtolower(class_basename($entity)), $module['views'])) {
+               && $module['active'] == 1
+               && in_array(strtolower(class_basename($entity)), $module['views'])) {
                 $tabs[] = $module;
             }
         }
@@ -42,7 +43,5 @@ trait MakesMenu
      * Builds an array items to be presented on the sidebar.
      * @return void menu items
      */
-    public function makeSideBarMenu()
-    {
-    }
+    public function makeSideBarMenu() {}
 }

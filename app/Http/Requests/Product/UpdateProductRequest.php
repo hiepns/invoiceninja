@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\Product;
@@ -19,45 +20,69 @@ class UpdateProductRequest extends Request
 {
     use ChecksEntityStatus;
 
+    /** @var class-string */
+    protected ?string $tag_entity_type = Product::class;
+
     /**
      * Determine if the user is authorized to make this request.
      *
      * @return bool
      */
-    public function authorize() : bool
+    public function authorize(): bool
     {
-        return auth()->user()->can('create', Product::class);
+
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return $user->can('edit', $this->product);
     }
 
     public function rules()
     {
-        if ($this->input('documents') && is_array($this->input('documents'))) {
-            $documents = count($this->input('documents'));
-
-            foreach (range(0, $documents) as $index) {
-                $rules['documents.'.$index] = 'file|mimes:png,ai,svg,jpeg,tiff,pdf,gif,psd,txt,doc,xls,ppt,xlsx,docx,pptx|max:20000';
-            }
-        } elseif ($this->input('documents')) {
-            $rules['documents'] = 'file|mimes:png,ai,svg,jpeg,tiff,pdf,gif,psd,txt,doc,xls,ppt,xlsx,docx,pptx|max:20000';
-        }
+        $rules = [];
+        $rules['file'] = 'bail|sometimes|array';
+        $rules['file.*'] = $this->fileValidation();
+        $rules['documents'] = 'bail|sometimes|array';
+        $rules['documents.*'] = $this->fileValidation();
 
         $rules['cost'] = 'numeric';
         $rules['price'] = 'numeric';
         $rules['quantity'] = 'numeric';
+        $rules['in_stock_quantity'] = 'sometimes|numeric';
+        $rules['stock_notification_threshold'] = 'sometimes|numeric';
+        $rules['stock_notification'] = 'sometimes|bool';
+        $rules['income_account_id'] = 'bail|sometimes|nullable|string|max:64';
 
-        return $rules;
+        return $this->globalRules($rules);
     }
 
-    protected function prepareForValidation()
+    public function prepareForValidation()
     {
         $input = $this->all();
 
-        if (! isset($input['quantity']) || $input['quantity'] < 1) {
+        if ($this->file('file') instanceof \Illuminate\Http\UploadedFile) {
+            $this->files->set('file', [$this->file('file')]);
+        }
+
+        if (! isset($input['quantity'])) {
             $input['quantity'] = 1;
         }
 
-        if (array_key_exists('assigned_user_id', $input) && is_string($input['assigned_user_id'])) {
-            $input['assigned_user_id'] = $this->decodePrimaryKey($input['assigned_user_id']);
+        if (isset($input['documents'])) {
+            unset($input['documents']);
+        }
+
+        $input = $this->decodePrimaryKeys($input);
+
+        if (array_key_exists('in_stock_quantity', $input) && request()->has('update_in_stock_quantity') && request()->input('update_in_stock_quantity') == 'true') {
+        } elseif (array_key_exists('in_stock_quantity', $input)) {
+            unset($input['in_stock_quantity']);
+        }
+
+        foreach (['notes', 'product_key', 'custom_value1', 'custom_value2', 'custom_value3', 'custom_value4'] as $field) {
+            if (isset($input[$field]) && is_string($input[$field])) {
+                $input[$field] = \App\Services\Pdf\Purify::clean($input[$field], true);
+            }
         }
 
         $this->replace($input);

@@ -1,12 +1,13 @@
 <?php
+
 /**
  * quote Ninja (https://quoteninja.com).
  *
  * @link https://github.com/quoteninja/quoteninja source repository
  *
- * @copyright Copyright (c) 2020. quote Ninja LLC (https://quoteninja.com)
+ * @copyright Copyright (c) 2022. quote Ninja LLC (https://quoteninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Factory;
@@ -24,10 +25,13 @@ class CloneQuoteFactory
         $clone_quote->due_date = null;
         $clone_quote->partial_due_date = null;
         $clone_quote->user_id = $user_id;
-        $clone_quote->balance = $quote->amount;
+        //$clone_quote->balance = $quote->amount;
         $clone_quote->amount = $quote->amount;
         $clone_quote->line_items = $quote->line_items;
 
+        $clone_quote->sync = null;
+        $clone_quote->backup = null; // @phpstan-ignore-line
+        
         return $clone_quote;
     }
 }

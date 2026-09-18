@@ -3,9 +3,9 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license 
  */
 
 const appendToElement = (parent, value) => {
@@ -24,6 +24,7 @@ const appendToElement = (parent, value) => {
     _temp.hidden = true;
 
     _parent.append(_temp);
+
 };
 
 window.appendToElement = appendToElement;

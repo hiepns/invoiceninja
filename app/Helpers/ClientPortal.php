@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 use Illuminate\Contracts\View\Factory;
@@ -18,18 +19,25 @@ use Illuminate\View\View;
  *
  * @param $page
  * @param bool $boolean
- * @return bool
+ * @return bool | string
  */
 function isActive($page, bool $boolean = false)
 {
     $current_page = Route::currentRouteName();
+    $action = Route::currentRouteAction(); // string
+
+    $show = str_replace(['.show','payment_methodss','documentss','subscriptionss','paymentss','projectss'], ['s.index','payment_methods','documents','subscriptions','payments','projects'], $current_page);
 
     if ($page == $current_page && $boolean) {
         return true;
     }
 
     if ($page == $current_page) {
-        return 'bg-primary-darken';
+        return 'bg-gray-200';
+    }
+
+    if (($page == $show) && $boolean) {
+        return true;
     }
 
     return false;

@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace Tests\Unit\Migration;
@@ -17,7 +18,7 @@ use Tests\TestCase;
 
 class FeesAndLimitsTest extends TestCase
 {
-    public function setUp(): void
+    protected function setUp(): void
     {
         parent::setUp();
     }
@@ -36,7 +37,7 @@ class FeesAndLimitsTest extends TestCase
         $data['fee_tax_name3'] = '';
         $data['fee_tax_rate3'] = 0;
         $data['fee_cap'] = 0;
-        
+
         $fees_and_limits_array = [];
         $fees_and_limits_array[] = $data;
 
@@ -50,7 +51,7 @@ class FeesAndLimitsTest extends TestCase
         $new_arr = [];
 
         foreach ($fees_and_limits as $key => $value) {
-            $fal = new FeesAndLimits;
+            $fal = new FeesAndLimits();
             // $fal->{$key} = $value;
 
             foreach ($value as $k => $v) {

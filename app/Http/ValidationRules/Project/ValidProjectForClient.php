@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules\Project;
@@ -24,10 +25,13 @@ class ValidProjectForClient implements Rule
 
     public $input;
 
+    public $message;
+
     public function __construct($input)
     {
         $this->input = $input;
     }
+
     /**
      * @param string $attribute
      * @param mixed $value
@@ -35,15 +39,23 @@ class ValidProjectForClient implements Rule
      */
     public function passes($attribute, $value)
     {
+        $this->message = ctrans('texts.project_client_do_not_match');
+
         if (empty($this->input['project_id'])) {
             return true;
         }
-        
-        if (is_string($this->input['project_id'])) {
-            $this->input['project_id'] = $this->decodePrimaryKey($this->input['project_id']);
+
+        $project = Project::withTrashed()->find($this->input['project_id']);
+
+        if (! $project) {
+            $this->message = 'Project not found';
+            return false;
         }
 
-        $project = Project::findOrFail($this->input['project_id']);
+        if (!isset($this->input['client_id'])) {
+            $this->message = 'No Client ID provided.';
+            return false;
+        }
 
         return $project->client_id == $this->input['client_id'];
     }
@@ -53,6 +65,6 @@ class ValidProjectForClient implements Rule
      */
     public function message()
     {
-        return "Project client does not match entity client";
+        return $this->message;
     }
 }

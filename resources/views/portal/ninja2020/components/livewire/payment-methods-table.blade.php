@@ -2,7 +2,7 @@
     <div class="flex items-center justify-between">
         <div class="flex items-center">
             <span class="mr-2 text-sm hidden md:block">{{ ctrans('texts.per_page') }}</span>
-            <select wire:model="per_page" class="form-select py-1 text-sm">
+            <select wire:model.live="per_page" class="form-select py-1 text-sm">
                 <option>5</option>
                 <option selected>10</option>
                 <option>15</option>
@@ -11,10 +11,10 @@
         </div>
         <div class="relative" x-data="{ open: false }" x-on:click.away="open = false">
             <!-- Add payment method button -->
-            @if($client->getCreditCardGateway() || $client->getBankTransferGateway())
+            @if($client->getCreditCardGateway() || $client->getBankTransferGateway() || $client->getBACSGateway() || $client->getACSSGateway())
                 <button x-on:click="open = !open" class="button button-primary bg-primary" data-cy="add-payment-method">{{ ctrans('texts.add_payment_method') }}</button>
                 <div x-show="open" x-transition:enter="transition ease-out duration-100" x-transition:enter-start="transform opacity-0 scale-95" x-transition:enter-end="transform opacity-100 scale-100" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="transform opacity-100 scale-100" x-transition:leave-end="transform opacity-0 scale-95" class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg">
-                    <div class="py-1 rounded-md bg-white shadow-xs">
+                    <div class="py-1 rounded-md bg-white ring-1 ring-black ring-opacity-5">
                         @if($client->getCreditCardGateway())
                             <a data-cy="add-credit-card-link" href="{{ route('client.payment_methods.create', ['method' => App\Models\GatewayType::CREDIT_CARD]) }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150">
                                 {{ ctrans('texts.credit_card') }}
@@ -22,7 +22,17 @@
                         @endif
                         @if($client->getBankTransferGateway())
                             <a data-cy="add-bank-account-link" href="{{ route('client.payment_methods.create', ['method' => $client->getBankTransferMethodType()]) }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150">
-                                {{ ctrans('texts.bank_account') }}
+                                {{ ctrans('texts.bank_account') }} 
+                            </a>
+                        @endif
+                        @if($client->getBACSGateway())
+                            <a data-cy="add-bacs-link" href="{{ route('client.payment_methods.create', ['method' => App\Models\GatewayType::BACS]) }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150">
+                                {{ ctrans('texts.bacs') }}
+                            </a>
+                        @endif
+                        @if($client->getACSSGateway())
+                            <a data-cy="add-bacs-link" href="{{ route('client.payment_methods.create', ['method' => App\Models\GatewayType::ACSS]) }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150">
+                                {{ ctrans('texts.acss') }}
                             </a>
                         @endif
                     </div>
@@ -41,7 +51,7 @@
                             </span>
                     </th>
                     <th class="px-6 py-3 border-b border-gray-200 bg-primary text-left text-xs leading-4 font-medium text-white  uppercase tracking-wider">
-                            <span role="button" wire:click="sortBy('type_id')" class="cursor-pointer">
+                            <span role="button" wire:click="sortBy('gateway_type_id')" class="cursor-pointer">
                                 {{ ctrans('texts.payment_type_id') }}
                             </span>
                     </th>
@@ -63,26 +73,26 @@
                 <tbody>
                 @forelse($payment_methods as $payment_method)
                     <tr class="bg-white group hover:bg-gray-100">
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
                             {{ $payment_method->formatDateTimestamp($payment_method->created_at, $client->date_format()) }}
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
-                            {{ ctrans("texts.{$payment_method->gateway_type->alias}") }}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                            {{ App\Models\GatewayType::getAlias($payment_method->gateway_type_id) }}
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
-                            {{ ucfirst(optional($payment_method->meta)->brand) }}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                            {{ property_exists($payment_method->meta, 'brand') ? ucfirst($payment_method->meta?->brand) : '' }}
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
                             @if(isset($payment_method->meta->exp_month) && isset($payment_method->meta->exp_year))
                                 {{ $payment_method->meta->exp_month}} / {{ $payment_method->meta->exp_year }}
                             @endif
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500" data-cy="pm-last4">
                             @isset($payment_method->meta->last4)
                                 **** {{ $payment_method->meta->last4 }}
                             @endisset
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
                             @if($payment_method->is_default)
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none"
                                      stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -91,7 +101,7 @@
                                 </svg>
                             @endif
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap flex items-center justify-end text-sm leading-5 font-medium" data-cy="view-payment-method">
+                        <td class="px-6 py-4 whitespace-nowrap flex items-center justify-end text-sm leading-5 font-medium" data-cy="view-payment-method">
                             <a href="{{ route('client.payment_methods.show', $payment_method->hashed_id) }}"
                                class="text-blue-600 hover:text-indigo-900 focus:outline-none focus:underline">
                                 @lang('texts.view')
@@ -100,7 +110,7 @@
                     </tr>
                 @empty
                     <tr class="bg-white group hover:bg-gray-100">
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500" colspan="100%">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500" colspan="100%">
                             {{ ctrans('texts.no_results') }}
                         </td>
                     </tr>
@@ -116,6 +126,6 @@
             </span>
         @endif
 
-        {{ $payment_methods->links() }}
+        {{ $payment_methods->links('portal/ninja2020/vendor/pagination') }}
     </div>
 </div>

@@ -2,7 +2,7 @@
     <div class="flex items-center justify-between">
         <div class="flex items-center">
             <span class="mr-2 text-sm hidden md:block">{{ ctrans('texts.per_page') }}</span>
-            <select wire:model="per_page" class="form-select py-1 text-sm">
+            <select wire:model.live="per_page" class="form-select py-1 text-sm">
                 <option>5</option>
                 <option selected>10</option>
                 <option>15</option>
@@ -14,6 +14,11 @@
         <table class="min-w-full shadow rounded border border-gray-200 payments-table">
             <thead>
                 <tr>
+                    <th class="px-6 py-3 border-b border-gray-200 bg-primary text-left text-xs leading-4 font-medium text-white uppercase tracking-wider">
+                        <span role="button" wire:click="sortBy('number')" class="cursor-pointer">
+                            {{ ctrans('texts.number') }}
+                        </span>
+                    </th>
                     <th class="px-6 py-3 border-b border-gray-200 bg-primary text-left text-xs leading-4 font-medium text-white uppercase tracking-wider">
                         <span role="button" wire:click="sortBy('date')" class="cursor-pointer">
                             {{ ctrans('texts.payment_date') }}
@@ -45,22 +50,25 @@
             <tbody>
                 @forelse($payments as $payment)
                     <tr class="bg-white group hover:bg-gray-100">
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
-                            {{ $payment->formatDate($payment->date, $payment->client->date_format()) }}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                            {{ $payment->number }}
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
-                            {{ optional($payment->type)->name }}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                            {{ $payment->clientPaymentDate() }}
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
-                            {!! \App\Utils\Number::formatMoney($payment->amount, $payment->client) !!}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                            {{ $payment->translatedType() }}
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
-                            {{ $payment->transaction_reference }}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                            {!! \App\Utils\Number::formatMoney($payment->amount > 0 ? $payment->amount : $payment->credits->sum('pivot.amount'), $payment->client) !!}
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
-                            {!! \App\Models\Payment::badgeForStatus($payment->status_id) !!}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                            {{ \Illuminate\Support\Str::limit($payment->transaction_reference ?? '', 35) }}
                         </td>
-                        <td class="px-6 py-4 whitespace-no-wrap flex items-center justify-end text-sm leading-5 font-medium">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                            {!! $payment->badgeForStatus() !!}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap flex items-center justify-end text-sm leading-5 font-medium">
                             <a href="{{ route('client.payments.show', $payment->hashed_id) }}" class="text-blue-600 hover:text-indigo-900 focus:outline-none focus:underline">
                                 @lang('texts.view')
                             </a>
@@ -68,7 +76,7 @@
                     </tr>
                 @empty
                     <tr class="bg-white group hover:bg-gray-100">
-                        <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500" colspan="100%">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500" colspan="100%">
                             {{ ctrans('texts.no_results') }}
                         </td>
                     </tr>
@@ -82,6 +90,6 @@
                 {{ ctrans('texts.showing_x_of', ['first' => $payments->firstItem(), 'last' => $payments->lastItem(), 'total' => $payments->total()]) }}
             </span>
         @endif
-        {{ $payments->links() }}
+        {{ $payments->links('portal/ninja2020/vendor/pagination') }}
     </div>
 </div>

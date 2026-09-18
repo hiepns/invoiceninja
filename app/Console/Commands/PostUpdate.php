@@ -1,25 +1,26 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Console\Commands;
 
-use Composer\Console\Application;
+use App\Jobs\Util\VersionCheck;
+use App\Utils\Traits\AppSetup;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
-use Log;
-use Symfony\Component\Console\Input\ArrayInput;
 
 class PostUpdate extends Command
 {
-    protected $name = 'ninja:post-update';
+    use AppSetup;
+
     /**
      * The name and signature of the console command.
      *
@@ -44,29 +45,44 @@ class PostUpdate extends Command
     {
         set_time_limit(0);
 
-        info('running post update');
+        nlog('running post update');
 
         try {
             Artisan::call('migrate', ['--force' => true]);
-        } catch (Exception $e) {
-            Log::error("I wasn't able to migrate the data.");
+        } catch (\Exception $e) {
+            nlog("I wasn't able to migrate the data.");
         }
+
+        nlog('finished migrating');
 
         try {
-            Artisan::call('optimize');
-        } catch (Exception $e) {
-            Log::error("I wasn't able to optimize.");
+            // Artisan::call('optimize');
+            Artisan::call('config:clear');
+        } catch (\Exception $e) {
+            nlog("I wasn't able to clear config.");
         }
 
-        /* For the following to work, the web user (www-data) must own all the directories */
+        nlog('cleared config');
 
-        putenv('COMPOSER_HOME=' . __DIR__ . '/vendor/bin/composer');
+        try {
+            Artisan::call('view:clear');
+        } catch (\Exception $e) {
+            nlog("I wasn't able to clear the views.");
+        }
 
-        $input = new ArrayInput(['command' => 'install', '--no-dev' => 'true']);
-        $application = new Application();
-        $application->setAutoExit(false);
-        $application->run($input);
+        nlog('view cleared');
 
-        echo "Done.";
+        try {
+            Artisan::call('queue:restart');
+        } catch (\Exception $e) {
+            nlog("I wasn't able to restart the queue.");
+        }
+
+        nlog('queue restarted');
+
+        Artisan::call('cache:clear');
+        VersionCheck::dispatch();
+
+        nlog('Sent for version check');
     }
 }

@@ -1,75 +1,90 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Helpers\Mail;
 
-use Dacastro4\LaravelGmail\Services\Message\Mail;
-use Illuminate\Mail\Transport\Transport;
-use Swift_Mime_SimpleMessage;
+use Google\Client;
+use Google\Service\Gmail;
+use Google\Service\Gmail\Message;
+use Symfony\Component\Mailer\SentMessage;
+use Symfony\Component\Mailer\Transport\AbstractTransport;
+use Symfony\Component\Mime\MessageConverter;
 
 /**
  * GmailTransport.
  */
-class GmailTransport extends Transport
+class GmailTransport extends AbstractTransport
 {
-    /**
-     * The Gmail instance.
-     *
-     * @var Mail
-     */
-    protected $gmail;
-
-    /**
-     * The GMail OAuth Token.
-     * @var string token
-     */
-    protected $token;
-
-    /**
-     * Create a new Gmail transport instance.
-     *
-     * @param Mail $gmail
-     * @param string $token
-     */
-    public function __construct(Mail $gmail, string $token)
+    public function __construct()
     {
-        $this->gmail = $gmail;
-        $this->token = $token;
+        parent::__construct();
     }
 
-    public function send(Swift_Mime_SimpleMessage $message, &$failedRecipients = null)
+    protected function doSend(SentMessage $message): void
     {
-        /*We should nest the token in the message and then discard it as needed*/
+        nlog("In Do Send");
 
-        $this->beforeSendPerformed($message);
+        /** @var \Symfony\Component\Mime\Email $message */
+        $message = MessageConverter::toEmail($message->getOriginalMessage()); //@phpstan-ignore-line
 
-        $this->gmail->using($this->token);
-        $this->gmail->to($message->getTo());
-        $this->gmail->from($message->getFrom());
-        $this->gmail->subject($message->getSubject());
-        $this->gmail->message($message->getBody());
-        //$this->gmail->message($message->toString());
-        $this->gmail->cc($message->getCc());
-        $this->gmail->bcc($message->getBcc());
+        //ensure utf-8 encoding of subject
+        $subject = $message->getSubject();
 
-        info(print_r($message->getChildren(), 1));
+        $subject = \App\Utils\Encode::convert($subject);
 
-        foreach ($message->getChildren() as $child) {
-            $this->gmail->attach($child);
-        } //todo this should 'just work'
+        $message->subject($subject);
 
-        $this->gmail->send();
+        /** @phpstan-ignore-next-line **/
+        $token = $message->getHeaders()->get('gmailtoken')->getValue(); // @phpstan-ignore-line
+        $message->getHeaders()->remove('gmailtoken');
 
-        $this->sendPerformed($message);
+        $client = new Client();
+        $client->setClientId(config('ninja.auth.google.client_id'));
+        $client->setClientSecret(config('ninja.auth.google.client_secret'));
+        $client->setAccessToken($token);
 
-        return $this->numberOfRecipients($message);
+        $service = new Gmail($client);
+
+        $body = new Message();
+
+        $bccs = $message->getHeaders()->get('Bcc');
+
+        $bcc_list = '';
+
+        if ($bccs) {
+            $bcc_list = 'Bcc: ';
+
+            foreach ($bccs->getAddresses() as $address) {
+
+                $bcc_list .= $address->getAddress() . ',';
+            }
+
+            $bcc_list = rtrim($bcc_list, ",") . "\r\n";
+        }
+
+        $body->setRaw($this->base64_encode($bcc_list . $message->toString()));
+
+        $service->users_messages->send('me', $body, []);
+
+    }
+
+    private function base64_encode($data)
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+        // return rtrim(strtr(base64_encode($data), ['+' => '-', '/' => '_']), '=');
+    }
+
+    public function __toString(): string
+    {
+        return 'gmail';
     }
 }

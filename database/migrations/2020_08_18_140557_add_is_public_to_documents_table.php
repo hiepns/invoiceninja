@@ -4,18 +4,16 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
-
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class AddIsPublicToDocumentsTable extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      *
@@ -61,10 +59,10 @@ class AddIsPublicToDocumentsTable extends Migration
             $table->boolean('auto_bill_enabled')->default(0);
             $table->unsignedInteger('design_id')->nullable();
             $table->boolean('uses_inclusive_taxes')->default(0);
-            $table->string('custom_surcharge1')->nullable();
-            $table->string('custom_surcharge2')->nullable();
-            $table->string('custom_surcharge3')->nullable();
-            $table->string('custom_surcharge4')->nullable();
+            $table->decimal('custom_surcharge1', 20, 6)->nullable();
+            $table->decimal('custom_surcharge2', 20, 6)->nullable();
+            $table->decimal('custom_surcharge3', 20, 6)->nullable();
+            $table->decimal('custom_surcharge4', 20, 6)->nullable();
             $table->boolean('custom_surcharge_tax1')->default(false);
             $table->boolean('custom_surcharge_tax2')->default(false);
             $table->boolean('custom_surcharge_tax3')->default(false);
@@ -84,7 +82,7 @@ class AddIsPublicToDocumentsTable extends Migration
         Schema::table('companies', function ($table) {
             $table->enum('default_auto_bill', ['off', 'always', 'optin', 'optout'])->default('off');
         });
-    
+
         Schema::create('recurring_invoice_invitations', function ($t) {
             $t->increments('id');
             $t->unsignedInteger('company_id');
@@ -101,7 +99,7 @@ class AddIsPublicToDocumentsTable extends Migration
             $t->timestamps(6);
             $t->softDeletes('deleted_at', 6);
 
-            $t->index(['deleted_at', 'recurring_invoice_id', 'company_id'], 'rec_co_del');
+            $t->index(['recurring_invoice_id', 'deleted_at'], 'rec_co_del');
             $t->unique(['client_contact_id', 'recurring_invoice_id'], 'cli_rec');
         });
     }
@@ -114,4 +112,4 @@ class AddIsPublicToDocumentsTable extends Migration
     public function down()
     {
     }
-}
+};

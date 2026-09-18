@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Feature;
 
 use App\DataMapper\CompanySettings;
@@ -20,60 +22,56 @@ use App\Models\Company;
 use App\Models\Invoice;
 use App\Models\User;
 use App\Utils\Traits\MakesHash;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Session;
 use Tests\TestCase;
 
 /**
- * @test
- * @covers App\Models\InvoiceInvitation
+ *
+ *  App\Models\InvoiceInvitation
  */
 class InvitationTest extends TestCase
 {
     use MakesHash;
-    //use DatabaseTransactions;
-    //use RefreshDatabase;
+    use DatabaseTransactions;
+    // use RefreshDatabase;
 
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
-        Session::start();
-
-        $this->faker = \Faker\Factory::create();
-
-        Model::reguard();
     }
 
     public function testInvoiceCreationAfterInvoiceMarkedSent()
     {
         $account = Account::factory()->create();
         $company = Company::factory()->create([
-                    'account_id' => $account->id,
-                ]);
+            'account_id' => $account->id,
+        ]);
 
         $account->default_company_id = $company->id;
         $account->save();
 
-        $user = User::where('email', 'user@example.com')->first();
+        $fake_email = uniqid('testuser') . '@gmail.com';
+
+        $user = User::where('email', $fake_email)->first();
 
         if (! $user) {
             $user = User::factory()->create([
+                'email' => $fake_email,
                 'account_id' => $account->id,
                 'confirmation_code' => $this->createDbHash(config('database.default')),
             ]);
         }
 
         $userPermissions = collect([
-                                    'view_invoice',
-                                    'view_client',
-                                    'edit_client',
-                                    'edit_invoice',
-                                    'create_invoice',
-                                    'create_client',
-                                ]);
+            'view_invoice',
+            'view_client',
+            'edit_client',
+            'edit_invoice',
+            'create_invoice',
+            'create_client',
+        ]);
 
         $userSettings = DefaultSettings::userSettings();
 
@@ -113,6 +111,7 @@ class InvitationTest extends TestCase
         $this->assertNotNull($invoice->client->primary_contact);
 
         $i = InvoiceInvitationFactory::create($invoice->company_id, $invoice->user_id);
+        $i->key = $this->createDbHash(config('database.default'));
         $i->client_contact_id = $client->primary_contact->first()->id;
         $i->invoice_id = $invoice->id;
         $i->save();

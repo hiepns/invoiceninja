@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers\Shop;
@@ -53,10 +54,11 @@ class InvoiceController extends BaseController
 
     public function show(Request $request, string $invitation_key)
     {
+        /** @var \App\Models\Company $company */
         $company = Company::where('company_key', $request->header('X-API-COMPANY-KEY'))->first();
 
         if (! $company->enable_shop_api) {
-            return response()->json(['message' => 'Shop is disabled', 'errors' => new stdClass], 403);
+            return response()->json(['message' => 'Shop is disabled', 'errors' => new stdClass()], 403);
         }
 
         $invitation = InvoiceInvitation::with(['invoice'])
@@ -69,10 +71,11 @@ class InvoiceController extends BaseController
 
     public function store(StoreShopInvoiceRequest $request)
     {
+        /** @var \App\Models\Company $company */
         $company = Company::where('company_key', $request->header('X-API-COMPANY-KEY'))->first();
 
         if (! $company->enable_shop_api) {
-            return response()->json(['message' => 'Shop is disabled', 'errors' => new stdClass], 403);
+            return response()->json(['message' => 'Shop is disabled', 'errors' => new stdClass()], 403);
         }
 
         app('queue')->createPayloadUsing(function () use ($company) {
@@ -83,9 +86,9 @@ class InvoiceController extends BaseController
 
         $invoice = $this->invoice_repo->save($request->all(), InvoiceFactory::create($company->id, $company->owner()->id));
 
-        event(new InvoiceWasCreated($invoice, $company, Ninja::eventVars()));
-
         $invoice = $invoice->service()->triggeredActions($request)->save();
+
+        event(new InvoiceWasCreated($invoice, $company, Ninja::eventVars(auth()->user() ? auth()->user()->id : null)));
 
         return $this->itemResponse($invoice);
     }

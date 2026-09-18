@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Factory;
@@ -16,9 +17,9 @@ use Illuminate\Support\Str;
 
 class InvoiceInvitationFactory
 {
-    public static function create(int $company_id, int $user_id) :InvoiceInvitation
+    public static function create(int $company_id, int $user_id): InvoiceInvitation
     {
-        $ii = new InvoiceInvitation;
+        $ii = new InvoiceInvitation();
         $ii->company_id = $company_id;
         $ii->user_id = $user_id;
         $ii->client_contact_id = null;

@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Middleware;
@@ -31,14 +32,22 @@ class UrlSetDb
     public function handle($request, Closure $next)
     {
         if (config('ninja.db.multi_db_enabled')) {
-            $hashids = new Hashids('', 10); //decoded output is _always_ an array.
+            $hashids = new Hashids(config('ninja.hash_salt'), 10);
 
             //parse URL hash and set DB
             $segments = explode('-', $request->route('confirmation_code'));
 
+            if (! is_array($segments)) {
+                return response()->json(['message' => 'Invalid confirmation code'], 403);
+            }
+
             $hashed_db = $hashids->decode($segments[0]);
 
-            MultiDB::setDB(MultiDB::DB_PREFIX.str_pad($hashed_db[0], 2, '0', STR_PAD_LEFT));
+            if (! is_array($hashed_db) || empty($hashed_db)) {
+                return response()->json(['message' => 'Invalid confirmation code'], 403);
+            }
+
+            MultiDB::setDB(MultiDB::DB_PREFIX . str_pad($hashed_db[0], 2, '0', STR_PAD_LEFT));
         }
 
         return $next($request);

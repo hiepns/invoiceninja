@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Services\Notification;
@@ -18,27 +19,27 @@ use Illuminate\Support\Facades\Notification;
 
 class NotificationService extends AbstractService
 {
-    const ALL = 'all_notifications';
+    public const ALL = 'all_notifications';
 
-    const ALL_USER = 'all_user_notifications';
+    public const ALL_USER = 'all_user_notifications';
 
-    const PAYMENT_SUCCESS = 'payment_success'; //@todo
+    public const PAYMENT_SUCCESS = 'payment_success'; //@todo
 
-    const PAYMENT_FAILURE = 'payment_failure'; //@todo
+    public const PAYMENT_FAILURE = 'payment_failure'; //@todo
 
-    const INVOICE_SENT = 'invoice_sent'; //@todo
+    public const INVOICE_SENT = 'invoice_sent'; //@todo
 
-    const QUOTE_SENT = 'quote_sent'; //@todo
+    public const QUOTE_SENT = 'quote_sent'; //@todo
 
-    const CREDIT_SENT = 'credit_sent'; //@todo
+    public const CREDIT_SENT = 'credit_sent'; //@todo
 
-    const QUOTE_VIEWED = 'quote_viewed';
+    public const QUOTE_VIEWED = 'quote_viewed';
 
-    const INVOICE_VIEWED = 'invoice_viewed';
+    public const INVOICE_VIEWED = 'invoice_viewed';
 
-    const CREDIT_VIEWED = 'credit_viewed';
+    public const CREDIT_VIEWED = 'credit_viewed';
 
-    const QUOTE_APPROVED = 'quote_approved'; //@todo
+    public const QUOTE_APPROVED = 'quote_approved'; //@todo
 
     public $company;
 
@@ -70,7 +71,6 @@ class NotificationService extends AbstractService
     public function ninja()
     {
         Notification::route('slack', config('ninja.notification.slack'))
-            ->route('mail', config('ninja.notification.mail'))
             ->notify($this->notification);
     }
 }

@@ -3,53 +3,34 @@
 
 @push('head')
 <meta name="show-invoice-terms" content="{{ $settings->show_accept_invoice_terms ? true : false }}">
-<meta name="require-invoice-signature" content="{{ $settings->require_invoice_signature ? true : false }}">
-<script src="https://cdn.jsdelivr.net/npm/signature_pad@2.3.2/dist/signature_pad.min.js"></script>
+<meta name="require-invoice-signature" content="{{ $requires_signature }}">
+<script src="{{ asset('vendor/signature_pad@2.3.2/signature_pad.min.js') }}"></script>
 @endpush
 
 @section('body')
-<form action="{{ route('client.payments.process') }}" method="post" id="payment-form">
+<form action="{{ route('client.payments.process') }}" method="post" id="payment-form" onkeypress="return event.keyCode != 13;">
     @csrf
     <input type="hidden" name="company_gateway_id" id="company_gateway_id">
     <input type="hidden" name="payment_method_id" id="payment_method_id">
     <input type="hidden" name="signature">
+    <input type="hidden" name="pre_payment" value="{{ isset($pre_payment) ? $pre_payment : false }}">
+    <input type="hidden" name="is_recurring" value="{{ isset($is_recurring) ? $is_recurring : false }}">
+    <input type="hidden" name="frequency_id" value="{{ isset($frequency_id) ? $frequency_id : false }}">
+    <input type="hidden" name="remaining_cycles" value="{{ isset($remaining_cycles) ? $remaining_cycles : false }}">
+    <input type="hidden" name="contact_first_name" value="{{ auth()->guard('contact')->user()->first_name }}">
+    <input type="hidden" name="contact_last_name" value="{{ auth()->guard('contact')->user()->last_name }}">
+    <input type="hidden" name="contact_email" value="{{ auth()->guard('contact')->user()->email }}">
+
+    <input type="hidden" name="client_city" value="{{ auth()->guard('contact')->user()->client->city }}">
+    <input type="hidden" name="client_postal_code" value="{{ auth()->guard('contact')->user()->client->postal_code }}">
+    <input type="hidden" name="docuninja_active" value="{{ $docuninja_active ? 'true' : 'false' }}">
 
     <div class="container mx-auto">
         <div class="grid grid-cols-6 gap-4">
             <div class="col-span-6 md:col-start-2 md:col-span-4">
                 <div class="flex justify-end">
                     <div class="flex justify-end mb-2">
-                        <!-- Pay now button -->
-                        @if(count($payment_methods) > 0)
-                        <div x-data="{ open: false }" @keydown.window.escape="open = false" @click.away="open = false" class="relative inline-block text-left" data-cy="payment-methods-dropdown">
-                            <div>
-                                <div class="rounded-md shadow-sm">
-                                    <button @click="open = !open" type="button" class="inline-flex justify-center w-full px-4 py-2 text-sm font-medium leading-5 text-gray-700 transition duration-150 ease-in-out bg-white border border-gray-300 rounded-md hover:text-gray-500 focus:outline-none focus:border-blue-300 focus:shadow-outline-blue active:bg-gray-50 active:text-gray-800">
-                                        {{ ctrans('texts.pay_now') }}
-                                        <svg class="w-5 h-5 ml-2 -mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                            <div x-show="open" class="absolute right-0 w-56 mt-2 origin-top-right rounded-md shadow-lg">
-                                <div class="bg-white rounded-md shadow-xs">
-                                    <div class="py-1">
-                                        @foreach($payment_methods as $payment_method)
-                                        <a href="#" @click="{ open = false }" data-company-gateway-id="{{ $payment_method['company_gateway_id'] }}" data-gateway-type-id="{{ $payment_method['gateway_type_id'] }}" class="block px-4 py-2 text-sm leading-5 text-gray-700 dropdown-gateway-button hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:bg-gray-100 focus:text-gray-900" data-cy="payment-method">
-                                            {{ $payment_method['label'] }}
-                                        </a>
-                                        @endforeach
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        @else
-                        <span class="inline-flex items-center text-sm">
-                            <span>{{ ctrans('texts.to_pay_invoices') }} &nbsp;</span>
-                            <a class="button-link text-primary" href="{{ route('client.payment_methods.index') }}">{{ ctrans('texts.add_payment_method_first') }}.</a>
-                        </span>
-                        @endif
+                        @livewire('pay-now-dropdown', ['total' => $total, 'company_id' => $company->id, 'db' => $company->db])
                     </div>
                 </div>
 
@@ -67,7 +48,7 @@
                     <div>
                         <dl>
                             @if(!empty($invoice->number) && !is_null($invoice->number))
-                            <div class="px-4 py-5 bg-gray-50 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                            <div class="px-4 py-5 bg-white sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                                 <dt class="text-sm font-medium leading-5 text-gray-500">
                                     {{ ctrans('texts.invoice_number') }}
                                 </dt>
@@ -77,56 +58,91 @@
                             </div>
                             @endif
 
+                            <div class="px-4 py-5 bg-white sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                                @if($invoice->po_number)
+                                <dt class="text-sm font-medium leading-5 text-gray-500">
+                                    {{ ctrans('texts.po_number') }}
+                                </dt>
+                                <dd class="mt-1 text-sm leading-5 text-gray-900 sm:mt-0 sm:col-span-2">
+                                    {{ $invoice->po_number }}
+                                </dd>
+                                @elseif($invoice->public_notes)
+                                <dt class="text-sm font-medium leading-5 text-gray-500">
+                                    {{ ctrans('texts.public_notes') }}
+                                </dt>
+                                <dd class="mt-1 text-sm leading-5 text-gray-900 sm:mt-0 sm:col-span-2">
+                                    {!! \App\Services\Pdf\Purify::clean(html_entity_decode($invoice->public_notes), true) !!}
+                                </dd>
+                                @else
+                                <dt class="text-sm font-medium leading-5 text-gray-500">
+                                    {{ ctrans('texts.invoice_date') }}
+                                </dt>
+                                <dd class="mt-1 text-sm leading-5 text-gray-900 sm:mt-0 sm:col-span-2">
+                                    {{ $invoice->translateDate($invoice->date, $invoice->client->date_format(), $invoice->client->locale()) }}
+                                </dd>
+                                @endif
+                            </div>
+
                             @if(!empty($invoice->due_date) && !is_null($invoice->due_date))
                             <div class="px-4 py-5 bg-white sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                                 <dt class="text-sm font-medium leading-5 text-gray-500">
                                     {{ ctrans('texts.due_date') }}
                                 </dt>
                                 <dd class="mt-1 text-sm leading-5 text-gray-900 sm:mt-0 sm:col-span-2">
-                                    {{ $invoice->due_date }}
+                                    {{ $invoice->translateDate($invoice->due_date, $invoice->client->date_format(), $invoice->client->locale()) }}
                                 </dd>
                             </div>
                             @endif
 
-                            <div class="px-4 py-5 bg-gray-50 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                            @if($settings->client_portal_allow_under_payment || $settings->client_portal_allow_over_payment)
+                            <div class="px-4 py-5 bg-white sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                                 <dt class="text-sm font-medium leading-5 text-gray-500">
-                                    {{ ctrans('texts.additional_info') }}
+                                    {{ ctrans('texts.amount_due') }}
                                 </dt>
                                 <dd class="mt-1 text-sm leading-5 text-gray-900 sm:mt-0 sm:col-span-2">
-                                    @if($invoice->po_number)
-                                        {{ $invoice->po_number }}
-                                    @elseif($invoice->public_notes)
-                                        {{ $invoice->public_notes }}
-                                    @else
-                                        {{ $invoice->date}}
-                                    @endif
+                                    {{ $invoice->client->currency()->code }} ({{ $invoice->client->currency()->symbol }})
+                                    {{ $invoice->partial > 0 ? $invoice->partial : $invoice->balance }}
                                 </dd>
+
+                                @if($settings->client_portal_allow_over_payment)
+                                    <div class="mt-1">
+                                        <span class="mt-1 text-sm text-gray-800">{{ ctrans('texts.over_payment_helper') }}</span>
+                                    </div>
+                                @endif
                             </div>
+                            @endif
 
                             @if(!empty($invoice->amount) && !is_null($invoice->amount))
                             <div class="px-4 py-5 bg-white sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                                 <dt class="text-sm font-medium leading-5 text-gray-500">
-                                    {{ ctrans('texts.amount') }}
+                                    {{ ctrans('texts.payment_amount') }}
                                 </dt>
                                 <dd class="text-sm leading-5 text-gray-900 sm:mt-0 sm:col-span-2 flex flex-col">
                                     <!-- App\Utils\Number::formatMoney($invoice->amount, $invoice->client) -->
                                     <!-- Disabled input field don't send it's value with request. -->
                                     @if(!$settings->client_portal_allow_under_payment && !$settings->client_portal_allow_over_payment)
-                                        <input 
-                                            name="payable_invoices[{{$key}}][amount]" 
-                                            value="{{ $invoice->partial > 0 ? $invoice->partial : $invoice->balance }}"
-                                            class="mt-1 text-sm text-gray-800"
-                                            readonly />
+                                        <label>
+                                            {{ $invoice->client->currency()->code }} ({{ $invoice->client->currency()->symbol }})
+
+                                            <input
+                                                name="payable_invoices[{{$key}}][amount]"
+                                                value="{{ $invoice->partial > 0 ? $invoice->partial : $invoice->balance }}"
+                                                class="mt-1 text-sm text-gray-800"
+                                                readonly />
+                                        </label>
                                     @else
+                                    
                                         <div class="flex items-center">
-                                            <input 
-                                                type="text" 
-                                                class="input mt-0 mr-4 relative" 
-                                                name="payable_invoices[{{$key}}][amount]" 
-                                                value="{{ $invoice->partial > 0 ? $invoice->partial : $invoice->balance }}"/>
+                                            <label>
                                                 <span class="mt-2">{{ $invoice->client->currency()->code }} ({{ $invoice->client->currency()->symbol }})</span>
+                                                <input
+                                                    type="text"
+                                                    class="input mt-0 mr-4 relative"
+                                                    name="payable_invoices[{{$key}}][amount]"
+                                                    value="{{ $invoice->partial > 0 ? $invoice->partial : $invoice->balance }}"/>
+                                            </label>
                                         </div>
-                                    @endif  
+                                    @endif
 
                                     @if($settings->client_portal_allow_under_payment)
                                         <span class="mt-1 text-sm text-gray-800">{{ ctrans('texts.minimum_payment') }}: {{ $settings->client_portal_under_payment_minimum }}</span>
@@ -138,16 +154,21 @@
                     </div>
                 </div>
                 @endforeach
+
+                @if(intval($total) == 0)
+                    <small>* {{ ctrans('texts.online_payments_minimum_note') }}</small>
+                @endif
             </div>
         </div>
     </div>
 </form>
 
-@include('portal.ninja2020.invoices.includes.terms', ['entities' => $invoices, 'entity_type' => ctrans('texts.invoice')])
+@include('portal.ninja2020.invoices.includes.required-fields')
+@include('portal.ninja2020.invoices.includes.terms', ['entities' => $invoices, 'variables' => $variables, 'entity_type' => ctrans('texts.invoice')])
 @include('portal.ninja2020.invoices.includes.signature')
 
 @endsection
 
 @push('footer')
-    <script src="{{ asset('js/clients/invoices/payment.js') }}"></script>
+    @vite('resources/js/clients/invoices/payment.js')
 @endpush

@@ -5,47 +5,28 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Payments\PaymentWebhookRequest;
-use App\Models\Payment;
-use Illuminate\Support\Arr;
 
 class PaymentWebhookController extends Controller
 {
-    public function __construct()
+    public function __invoke(PaymentWebhookRequest $request)
     {
-        $this->middleware('guest');
-    }
+        //return early if we cannot resolve the company gateway
+        $company_gateway = $request->getCompanyGateway();
 
-    public function __invoke(PaymentWebhookRequest $request, string $company_key, string $gateway_key)
-    {
-        $transaction_reference = $this->getTransactionReference($request->all());
-
-        $payment = Payment::where('transaction_reference', $transaction_reference)->first();
-
-        if (is_null($payment)) {
-            return response([], 404); /* Record event, throw an exception.. */
+        if (!$company_gateway || $company_gateway->trashed()) {
+            return response()->json([], 200);
         }
 
-        return $request
-            ->companyGateway()
-            ->driver($payment->client)
-            ->setPaymentMethod($payment->gateway_type_id)
-            ->processWebhookRequest($request->all(), $request->company(), $request->companyGateway(), $payment);
-    }
-
-    public function getTransactionReference(array $data)
-    {
-        $flatten = Arr::dot($data);
-
-        if (isset($flatten['data.object.id'])) {
-            return $flatten['data.object.id']; // Request from Stripe
-        }
+        return $company_gateway
+                ->driver()
+                ->processWebhookRequest($request);
     }
 }

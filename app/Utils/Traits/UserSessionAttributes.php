@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Utils\Traits;
@@ -19,7 +20,7 @@ trait UserSessionAttributes
     /**
      * @param $value
      */
-    public function setCurrentCompanyId($value) : void
+    public function setCurrentCompanyId($value): void
     {
         session(['current_company_id' => $value]);
     }
@@ -27,7 +28,7 @@ trait UserSessionAttributes
     /**
      * @return int
      */
-    public function getCurrentCompanyId() : int
+    public function getCurrentCompanyId(): int
     {
         return session('current_company_id');
     }

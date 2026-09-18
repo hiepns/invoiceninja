@@ -5,9 +5,9 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers\ClientPortal;
@@ -15,7 +15,6 @@ namespace App\Http\Controllers\ClientPortal;
 use App\Http\Controllers\Controller;
 use App\Models\ClientContact;
 use App\Utils\Traits\MakesHash;
-use Illuminate\Support\Facades\Auth;
 
 class SwitchCompanyController extends Controller
 {
@@ -23,11 +22,17 @@ class SwitchCompanyController extends Controller
 
     public function __invoke(string $contact)
     {
-        $client_contact = ClientContact::where('email', auth()->user()->email)
-            ->where('id', $this->transformKeys($contact))
-            ->first();
+        $client_contact = ClientContact::query()
+                                       ->where('email', auth()->user()->email)
+                                       ->where('id', $this->transformKeys($contact))
+                                       ->firstOrFail();
 
-        Auth::guard('contact')->login($client_contact, true);
+        
+        request()->session()->invalidate();
+        request()->session()->regenerate(true);
+        request()->session()->regenerateToken();
+        
+        auth()->guard('contact')->loginUsingId($client_contact->id, true);
 
         return redirect('/client/dashboard');
     }

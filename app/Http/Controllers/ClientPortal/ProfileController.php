@@ -1,24 +1,26 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers\ClientPortal;
 
+use Illuminate\View\View;
+use App\Models\ClientContact;
+use App\Jobs\Util\UploadAvatar;
+use Illuminate\Routing\Redirector;
 use App\Http\Controllers\Controller;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Contracts\View\Factory;
 use App\Http\Requests\ClientPortal\UpdateClientRequest;
 use App\Http\Requests\ClientPortal\UpdateContactRequest;
-use App\Jobs\Util\UploadAvatar;
-use App\Models\ClientContact;
-use Illuminate\Contracts\View\Factory;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\View\View;
 
 class ProfileController extends Controller
 {
@@ -26,10 +28,14 @@ class ProfileController extends Controller
      * Show the form for editing the specified resource.
      *
      * @param ClientContact $client_contact
-     * @return Factory|View
+     * @return Factory|View|RedirectResponse|Redirector
      */
     public function edit(ClientContact $client_contact)
     {
+        if (auth()->guard('contact')->user()->client->getSetting('enable_client_profile_update') === false) {
+            return redirect()->route('client.dashboard');
+        }
+
         return $this->render('profile.index');
     }
 
@@ -38,19 +44,17 @@ class ProfileController extends Controller
      *
      * @param UpdateContactRequest $request
      * @param ClientContact $client_contact
-     * @return RedirectResponse
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function update(UpdateContactRequest $request, ClientContact $client_contact)
     {
-        $client_contact->fill($request->all());
+        $client_contact->fill($request->only(['first_name', 'last_name', 'email', 'password', 'phone']));
 
         if ($request->has('password')) {
             $client_contact->password = encrypt($request->password);
         }
 
         $client_contact->save();
-
-        // auth()->user()->fresh();
 
         return back()->withSuccess(
             ctrans('texts.profile_updated_successfully')
@@ -63,14 +67,14 @@ class ProfileController extends Controller
 
         //update avatar if needed
         if ($request->file('logo')) {
-            $path = UploadAvatar::dispatchNow($request->file('logo'), auth()->user()->client->client_hash);
+            $path = (new UploadAvatar($request->file('logo'), $client->client_hash))->handle();
 
             if ($path) {
                 $client->logo = $path;
             }
         }
 
-        $client->fill($request->all());
+        $client->fill($request->only(['name', 'phone', 'vat_number', 'phone','website', 'address1', 'address2','city', 'state', 'postal_code', 'country_id','shipping_address1', 'shipping_address2', 'shipping_city', 'shipping_state', 'shipping_postal_code', 'shipping_country_id']));
         $client->save();
 
         return back()->withSuccess(

@@ -1,14 +1,57 @@
 <!DOCTYPE html>
-<html data-report-errors="{{ $report_errors }}">
+<html data-report-errors="{{ $report_errors }}" data-rc="{{ $rc }}" data-user-agent="{{ $user_agent }}" data-login="{{ $login }}" data-signup="{{ $signup }}" data-white-label="{{ $white_label }}" data-microsoft-client-id="{{ config('services.microsoft.client_id') }}">
 <head>
     <!-- Source: https://github.com/invoiceninja/invoiceninja -->
     <!-- Version: {{ config('ninja.app_version') }} -->
   <meta charset="UTF-8">
-  <title>Invoice Ninja</title>
+  <title>{{ $white_label ? "" : config('ninja.app_name')  }}</title>
   <meta name="google-signin-client_id" content="{{ config('services.google.client_id') }}">
   <link rel="manifest" href="manifest.json?v={{ config('ninja.app_version') }}">
+  <script src="{{ asset('js/pdf.min.js') }}"></script>
+
+  @if(config('services.microsoft.client_id'))
+    <!-- Microsoft OAuth library -->
+    <script type="text/javascript" 
+      src="https://alcdn.msauth.net/browser/2.14.2/js/msal-browser.min.js"
+      integrity="sha384-ggh+EF1aSqm+Y4yvv2n17KpurNcZTeYUZUvhPziElsstmIEubyEB6AIVpKLuZgr"
+      crossorigin="anonymous">
+    </script>
+  @endif
+  
+  @if(\App\Utils\Ninja::isHosted())
+
+  <!-- Apple OAuth Library -->
+  <script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"></script>
+
+
+  <!-- G Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-WMJ5W23');</script>
+  <!-- End G Tag Manager -->
+
+  @endif
+  <script type="text/javascript">
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "{{ asset('js/pdf.worker.min.js') }}";
+  </script>
+   <script>
+    window.flutterConfiguration = {
+      @if(!\App\Utils\Ninja::isHosted())
+        canvasKitBaseUrl: "{{ $canvas_path }}/canvaskit/"
+      @endif
+    };
+  </script>
 </head>
 <body style="background-color:#888888;">
+
+  @if(\App\Utils\Ninja::isHosted())
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WMJ5W23"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+  @endif
 
   <style>
 
@@ -80,7 +123,7 @@
   </style>
 
   <script>
-    @if (request()->clear)
+    @if (request()->clear_local)
       window.onload = function() {
         window.localStorage.clear();
       }
@@ -96,11 +139,11 @@
       document.getElementById('loader').style.display = 'none';
     });
 
-    /*
+    
     function invokeServiceWorkerUpdateFlow() {
       // you have a better UI here, reloading is not a great user experince here.
-      const confirmed = confirm('New version of the app is available. Refresh now');
-      if (confirmed) {
+      const confirmed = alert('New version of the app is available. Refresh now');
+      if (confirmed == true) {
         window.location.reload();
       }
     }
@@ -143,10 +186,10 @@
     }
 
     handleServiceWorker();
-  */
+  
   </script>
 
-  <script defer src="main.dart.js?v={{ config('ninja.app_version') }}" type="application/javascript"></script>
+  <script defer src="{{ $path }}?v={{ config('ninja.app_version') }}" type="application/javascript"></script>
 
   <center style="padding-top: 150px" id="loader">
     <div class="loader"></div>

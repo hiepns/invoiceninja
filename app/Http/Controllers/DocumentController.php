@@ -1,22 +1,30 @@
 <?php
-
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
 namespace App\Http\Controllers;
 
+use App\Filters\DocumentFilters;
+use App\Http\Requests\Document\BulkActionRequest;
 use App\Http\Requests\Document\DestroyDocumentRequest;
+use App\Http\Requests\Document\EditDocumentRequest;
 use App\Http\Requests\Document\ShowDocumentRequest;
 use App\Http\Requests\Document\StoreDocumentRequest;
 use App\Http\Requests\Document\UpdateDocumentRequest;
+use App\Jobs\Entity\ZipEntity;
 use App\Models\Document;
 use App\Repositories\DocumentRepository;
 use App\Transformers\DocumentTransformer;
-use App\Utils\Traits\MakesHash;
-use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class DocumentController extends BaseController
 {
-    use MakesHash;
-
     protected $entity_type = Document::class;
 
     protected $entity_transformer = DocumentTransformer::class;
@@ -26,10 +34,6 @@ class DocumentController extends BaseController
      */
     protected $document_repo;
 
-    /**
-     * DocumentController constructor.
-     * @param DocumentRepository $document_repo
-     */
     public function __construct(DocumentRepository $document_repo)
     {
         parent::__construct();
@@ -40,13 +44,45 @@ class DocumentController extends BaseController
     }
 
     /**
-     * Display a listing of the resource.
-     *
-     * @return void
+     * @OA\Get(
+     *      path="/api/v1/documents",
+     *      operationId="getDocuments",
+     *      tags={"documents"},
+     *      summary="Gets a list of documents",
+     *      description="Lists documents, search and filters allow fine grained lists to be generated.
+
+    Query parameters can be added to performed more fine grained filtering of the documents, these are handled by the DocumentsFilters class which defines the methods available",
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
+     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
+     *      @OA\Parameter(ref="#/components/parameters/include"),
+     *      @OA\Parameter(ref="#/components/parameters/index"),
+     *      @OA\Response(
+     *          response=200,
+     *          description="A list of documents",
+     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
+     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
+     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
+     *          @OA\JsonContent(ref="#/components/schemas/Document"),
+     *       ),
+     *       @OA\Response(
+     *          response=422,
+     *          description="Validation error",
+     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
+     *       ),
+     *       @OA\Response(
+     *           response="default",
+     *           description="Unexpected Error",
+     *           @OA\JsonContent(ref="#/components/schemas/Error"),
+     *       ),
+     *     )
+     * @param DocumentFilters $filters
+     * @return Response| \Illuminate\Http\JsonResponse|mixed
      */
-    public function index()
+    public function index(DocumentFilters $filters)
     {
-        //
+        $documents = Document::filter($filters);
+
+        return $this->listResponse($documents);
     }
 
     /**
@@ -75,7 +111,7 @@ class DocumentController extends BaseController
      *
      * @param ShowDocumentRequest $request
      * @param Document $document
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      */
     public function show(ShowDocumentRequest $request, Document $document)
     {
@@ -84,19 +120,26 @@ class DocumentController extends BaseController
 
     public function download(ShowDocumentRequest $request, Document $document)
     {
+        $headers = [];
+
+        if (request()->input('inline') == 'true') {
+            $headers = array_merge($headers, ['Content-Disposition' => 'inline']);
+        }
+
         return response()->streamDownload(function () use ($document) {
-            echo file_get_contents($document->generateUrl());
-        }, basename($document->generateUrl()));
+            // echo file_get_contents($document->generateUrl());
+            echo $document->getFile();
+        }, basename($document->generateUrl()), $headers);
     }
 
     /**
      * Show the form for editing the specified resource.
      *
-     * @param EditDocumentRegquest $request
+     * @param EditDocumentRequest $request
      * @param Document $document
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      */
-    public function edit(EditDocumentRegquest $request, Document $document)
+    public function edit(EditDocumentRequest $request, Document $document)
     {
         return $this->itemResponse($document);
     }
@@ -106,11 +149,18 @@ class DocumentController extends BaseController
      *
      * @param UpdateDocumentRequest $request
      * @param Document $document
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      */
     public function update(UpdateDocumentRequest $request, Document $document)
     {
-        return $this->itemResponse($document);
+        $document->fill($request->all());
+        $document->save();
+
+        if ($document->documentable) { //@phpstan-ignore-line
+            $document->documentable->touch();
+        }
+
+        return $this->itemResponse($document->fresh());
     }
 
     /**
@@ -118,38 +168,50 @@ class DocumentController extends BaseController
      *
      * @param DestroyDocumentRequest $request
      * @param Document $document
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      */
     public function destroy(DestroyDocumentRequest $request, Document $document)
     {
         $this->document_repo->delete($document);
 
-        return response()->json(['message'=>'success']);
+        return response()->json(['message' => ctrans('texts.success')]);
     }
 
-    public function bulk()
+    public function bulk(BulkActionRequest $request)
     {
-        $action = request()->input('action');
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+        $action = $request->input('action');
+        $ids = $request->input('ids');
 
-        $ids = request()->input('ids');
+        $documents = Document::withTrashed()->with('documentable')->whereIn('id', $ids)->company()->get();
 
-        $documents = Document::withTrashed()->whereIn('id', $this->transformKeys($ids))->company()->get();
+        if ($action == 'download') {
 
-        if (! $invoices) {
-            return response()->json(['message' => 'No Documents Found']);
+            $downloadable_documents = $documents->filter(function($document) use ($user) {
+                                                return $user->can('view', $document);
+                                            })
+                                            ->pluck('id');
+
+            if ($downloadable_documents->isEmpty()) {
+                return response()->json(['message' => ctrans('texts.no_documents_found')], 422);
+            }
+
+            ZipEntity::dispatch($downloadable_documents, $user->company(), auth()->user(), Document::class); //@phpstan-ignore-line
+            
+            return response()->json(['message' => ctrans('texts.sent_message')], 200);
         }
 
         /*
          * Send the other actions to the switch
          */
-        $documents->each(function ($document, $key) use ($action) {
-            if (auth()->user()->can('edit', $document)) {
-                $this->{$action}($document);
+        $documents->each(function ($document, $key) use ($action, $user) {
+            if ($user->can('edit', $document->documentable)) {
+                $this->document_repo->{$action}($document);
             }
         });
 
         /* Need to understand which permission are required for the given bulk action ie. view / edit */
-
-        return $this->listResponse(Document::withTrashed()->whereIn('id', $this->transformKeys($ids))->company());
+        return $this->listResponse(Document::withTrashed()->whereIn('id', $ids)->company());
     }
 }

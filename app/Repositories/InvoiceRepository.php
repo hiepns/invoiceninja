@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Repositories;
@@ -22,7 +23,6 @@ class InvoiceRepository extends BaseRepository
 {
     use MakesHash;
 
-
     /**
      * Saves the invoices.
      *
@@ -31,7 +31,7 @@ class InvoiceRepository extends BaseRepository
      *
      * @return     Invoice|null  Returns the invoice object
      */
-    public function save($data, Invoice $invoice):?Invoice
+    public function save($data, Invoice $invoice): ?Invoice
     {
         return $this->alternativeSave($data, $invoice);
     }
@@ -43,14 +43,14 @@ class InvoiceRepository extends BaseRepository
      *
      * @return     Invoice|null  Return the invoice object
      */
-    public function markSent(Invoice $invoice):?Invoice
+    public function markSent(Invoice $invoice): ?Invoice
     {
         return $invoice->service()->markSent()->save();
     }
 
-    public function getInvitationByKey($key) :?InvoiceInvitation
+    public function getInvitationByKey($key): ?InvoiceInvitation
     {
-        return InvoiceInvitation::whereRaw('BINARY `key`= ?', [$key])->first();
+        return InvoiceInvitation::query()->where('key', $key)->first();
     }
 
     /**
@@ -63,24 +63,69 @@ class InvoiceRepository extends BaseRepository
      * @param Invoice $invoice
      * @return Invoice $invoice
      */
-    public function delete($invoice) :Invoice
+    public function delete($invoice): ?Invoice
     {
-        if ($invoice->is_deleted) {
+
+        if (!$invoice) {
+            return null;
+        }
+
+        $invoice = \DB::transaction(function () use ($invoice) {
+            $invoice = \App\Models\Invoice::withTrashed()->lockForUpdate()->find($invoice->id);
+
+            if (!$invoice || $invoice->is_deleted) {
+                return $invoice;
+            }
+
+            $invoice->is_deleted = true;
+            $invoice->saveQuietly();
+
+            return $invoice;
+        });
+
+        if (!$invoice || !$invoice->is_deleted) {
             return $invoice;
         }
 
-        $invoice->service()->markDeleted()->handleCancellation()->save();
-
-        parent::delete($invoice);
+        $invoice->refresh();
+        $invoice = $invoice->service()->markDeleted()->save();
 
         return $invoice;
     }
 
-    public function reverse()
+    /**
+     * Handles the restoration on a deleted invoice.
+     *
+     * @param  Invoice $invoice
+     * @return Invoice
+     */
+    public function restore($invoice): Invoice
     {
+        if ($invoice->is_proforma) {
+            return $invoice;
+        }
+
+        //if we have just archived, only perform a soft restore
+        if (! $invoice->is_deleted) {
+            parent::restore($invoice);
+
+            return $invoice;
+        }
+
+        // reversed delete invoice actions
+        $invoice = $invoice->service()->handleRestore()->save();
+
+        /* If the reverse did not succeed due to rules, then do not restore / unarchive */
+        if ($invoice->is_deleted) {
+            return $invoice;
+        }
+
+        parent::restore($invoice);
+
+        return $invoice;
     }
 
-    public function cancel()
-    {
-    }
+    public function reverse() {}
+
+    public function cancel() {}
 }

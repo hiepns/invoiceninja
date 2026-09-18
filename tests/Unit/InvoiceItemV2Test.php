@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Unit;
 
 use App\Factory\InvoiceItemFactory;
@@ -17,15 +19,14 @@ use Tests\MockAccountData;
 use Tests\TestCase;
 
 /**
- * @test
- * @covers  App\Helpers\Invoice\InvoiceItemSum
+ *
+ *   App\Helpers\Invoice\InvoiceItemSum
  */
 class InvoiceItemV2Test extends TestCase
 {
     use MockAccountData;
     use DatabaseTransactions;
-
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -39,7 +40,7 @@ class InvoiceItemV2Test extends TestCase
         $item->cost = 10;
         $item->is_amount_discount = true;
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = true;
         $settings->precision = 2;
 
@@ -66,7 +67,7 @@ class InvoiceItemV2Test extends TestCase
         $item->cost = 10;
         $item->is_amount_discount = true;
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = true;
         $settings->precision = 2;
 
@@ -115,7 +116,7 @@ class InvoiceItemV2Test extends TestCase
 
         $this->invoice->line_items = $line_items;
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = true;
         $settings->precision = 2;
         $item_calc = new InvoiceItemSum($this->invoice, $settings);
@@ -140,7 +141,7 @@ class InvoiceItemV2Test extends TestCase
 
         $this->invoice->line_items = [$item];
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = true;
         $settings->precision = 2;
         $item_calc = new InvoiceItemSum($this->invoice, $settings);
@@ -165,7 +166,7 @@ class InvoiceItemV2Test extends TestCase
 
         $this->invoice->line_items = [$item];
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = true;
         $settings->precision = 2;
 
@@ -189,7 +190,7 @@ class InvoiceItemV2Test extends TestCase
 
         $this->invoice->line_items = [$item];
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = false;
         $settings->precision = 2;
 
@@ -212,7 +213,7 @@ class InvoiceItemV2Test extends TestCase
 
         $this->invoice->line_items = [$item];
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = false;
         $settings->precision = 2;
 
@@ -234,7 +235,7 @@ class InvoiceItemV2Test extends TestCase
 
         $this->invoice->line_items = [$item];
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = false;
         $settings->precision = 2;
 
@@ -251,12 +252,14 @@ class InvoiceItemV2Test extends TestCase
         $item->cost = 10;
         $item->is_amount_discount = true;
         $item->discount = 2.521254522145214511;
+        $item->tax_name1 = 'GST';
         $item->tax_rate1 = 10;
+        $item->tax_name2 = 'VAT';
         $item->tax_rate2 = 17.5;
 
         $this->invoice->line_items = [$item];
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = false;
         $settings->precision = 2;
 
@@ -274,7 +277,7 @@ class InvoiceItemV2Test extends TestCase
         $item->cost = 10;
         $item->is_amount_discount = true;
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = true;
         $settings->precision = 2;
 
@@ -297,7 +300,7 @@ class InvoiceItemV2Test extends TestCase
         $item->cost = 10;
         $item->is_amount_discount = true;
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = true;
         $settings->precision = 2;
 
@@ -327,7 +330,7 @@ class InvoiceItemV2Test extends TestCase
         $item->is_amount_discount = true;
         $line_items[] = $item;
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = true;
         $settings->precision = 2;
 
@@ -360,7 +363,7 @@ class InvoiceItemV2Test extends TestCase
         $item->is_amount_discount = true;
         $line_items[] = $item;
 
-        $settings = new \stdClass;
+        $settings = new \stdClass();
         $settings->inclusive_taxes = true;
         $settings->precision = 2;
 

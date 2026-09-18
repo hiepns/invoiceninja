@@ -1,52 +1,59 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
 
-use App\Events\Expense\ExpenseWasCreated;
-use App\Events\Expense\ExpenseWasUpdated;
+use App\Utils\Ninja;
+use App\Models\Account;
+use App\Models\Expense;
+use Illuminate\Http\Response;
 use App\Factory\ExpenseFactory;
 use App\Filters\ExpenseFilters;
-use App\Http\Requests\Expense\CreateExpenseRequest;
-use App\Http\Requests\Expense\DestroyExpenseRequest;
+use App\Utils\Traits\MakesHash;
+use App\Utils\Traits\Uploadable;
+use App\Utils\Traits\BulkOptions;
+use App\Utils\Traits\SavesDocuments;
+use App\Jobs\EDocument\ImportEDocument;
+use App\Repositories\ExpenseRepository;
+use App\Transformers\ExpenseTransformer;
+use App\Events\Expense\ExpenseWasCreated;
+use App\Events\Expense\ExpenseWasUpdated;
+use App\Services\Template\TemplateAction;
+use App\Http\Requests\Expense\EDocumentRequest;
+use App\Http\Requests\Expense\BulkExpenseRequest;
 use App\Http\Requests\Expense\EditExpenseRequest;
 use App\Http\Requests\Expense\ShowExpenseRequest;
 use App\Http\Requests\Expense\StoreExpenseRequest;
+use App\Http\Requests\Expense\CreateExpenseRequest;
 use App\Http\Requests\Expense\UpdateExpenseRequest;
-use App\Models\Expense;
-use App\Repositories\ExpenseRepository;
-use App\Transformers\ExpenseTransformer;
-use App\Utils\Ninja;
-use App\Utils\Traits\BulkOptions;
-use App\Utils\Traits\MakesHash;
-use App\Utils\Traits\Uploadable;
-use Illuminate\Http\Request;
-use Illuminate\Http\Response;
+use App\Http\Requests\Expense\UploadExpenseRequest;
+use App\Http\Requests\Expense\DestroyExpenseRequest;
 
 /**
  * Class ExpenseController.
- * @covers App\Http\Controllers\ExpenseController
  */
 class ExpenseController extends BaseController
 {
     use MakesHash;
     use Uploadable;
     use BulkOptions;
+    use SavesDocuments;
 
     protected $entity_type = Expense::class;
 
     protected $entity_transformer = ExpenseTransformer::class;
 
     /**
-     * @var Expenseepository
+     * @var ExpenseRepository
      */
     protected $expense_repo;
 
@@ -69,9 +76,8 @@ class ExpenseController extends BaseController
      *      summary="Gets a list of expenses",
      *      description="Lists expenses, search and filters allow fine grained lists to be generated.
 
-    Query parameters can be added to performed more fine grained filtering of the expenses, these are handled by the ExpenseFilters class which defines the methods available",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      Query parameters can be added to performed more fine grained filtering of the expenses, these are handled by the ExpenseFilters class which defines the methods available",
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(ref="#/components/parameters/index"),
@@ -95,11 +101,11 @@ class ExpenseController extends BaseController
      *       ),
      *     )
      * @param ExpenseFilters $filters
-     * @return Response|mixed
+     * @return Response| \Illuminate\Http\JsonResponse|mixed
      */
     public function index(ExpenseFilters $filters)
     {
-        $expenses = Expense::filter($filters);
+        $expenses = Expense::filter($filters)->with('tags');
 
         return $this->listResponse($expenses);
     }
@@ -109,7 +115,7 @@ class ExpenseController extends BaseController
      *
      * @param ShowExpenseRequest $request
      * @param Expense $expense
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -118,8 +124,7 @@ class ExpenseController extends BaseController
      *      tags={"expenses"},
      *      summary="Shows a client",
      *      description="Displays a client by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -164,7 +169,7 @@ class ExpenseController extends BaseController
      *
      * @param EditExpenseRequest $request
      * @param Expense $expense
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -173,8 +178,7 @@ class ExpenseController extends BaseController
      *      tags={"expenses"},
      *      summary="Shows a client for editting",
      *      description="Displays a client by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -219,7 +223,7 @@ class ExpenseController extends BaseController
      *
      * @param UpdateExpenseRequest $request
      * @param Expense $expense
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      *
@@ -229,8 +233,7 @@ class ExpenseController extends BaseController
      *      tags={"expenses"},
      *      summary="Updates a client",
      *      description="Handles the updating of a client by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -275,7 +278,9 @@ class ExpenseController extends BaseController
 
         $this->uploadLogo($request->file('company_logo'), $expense->company, $expense);
 
-        event(new ExpenseWasUpdated($expense, $expense->company, Ninja::eventVars()));
+        event(new ExpenseWasUpdated($expense, $expense->company, Ninja::eventVars(auth()->user() ? auth()->user()->id : null)));
+
+        event('eloquent.updated: App\Models\Expense', $expense);
 
         return $this->itemResponse($expense->fresh());
     }
@@ -284,7 +289,7 @@ class ExpenseController extends BaseController
      * Show the form for creating a new resource.
      *
      * @param CreateExpenseRequest $request
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      *
@@ -294,8 +299,7 @@ class ExpenseController extends BaseController
      *      tags={"expenses"},
      *      summary="Gets a new blank client object",
      *      description="Returns a blank object with default values",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -321,7 +325,11 @@ class ExpenseController extends BaseController
      */
     public function create(CreateExpenseRequest $request)
     {
-        $expense = ExpenseFactory::create(auth()->user()->company()->id, auth()->user()->id);
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $expense = ExpenseFactory::create($user->company()->id, $user->id);
+        $expense->date = now()->addSeconds($user->company()->utc_offset())->format('Y-m-d');
 
         return $this->itemResponse($expense);
     }
@@ -330,7 +338,7 @@ class ExpenseController extends BaseController
      * Store a newly created resource in storage.
      *
      * @param StoreExpenseRequest $request
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      *
@@ -340,8 +348,7 @@ class ExpenseController extends BaseController
      *      tags={"expenses"},
      *      summary="Adds a client",
      *      description="Adds an client to a company",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -367,9 +374,14 @@ class ExpenseController extends BaseController
      */
     public function store(StoreExpenseRequest $request)
     {
-        $expense = $this->expense_repo->save($request->all(), ExpenseFactory::create(auth()->user()->company()->id, auth()->user()->id));
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        event(new ExpenseWasCreated($expense, $expense->company, Ninja::eventVars()));
+        $expense = $this->expense_repo->save($request->all(), ExpenseFactory::create($user->company()->id, $user->id));
+
+        event(new ExpenseWasCreated($expense, $expense->company, Ninja::eventVars($user ? $user->id : null)));
+
+        event('eloquent.created: App\Models\Expense', $expense);
 
         return $this->itemResponse($expense);
     }
@@ -379,7 +391,7 @@ class ExpenseController extends BaseController
      *
      * @param DestroyExpenseRequest $request
      * @param Expense $expense
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @throws \Exception
@@ -389,8 +401,7 @@ class ExpenseController extends BaseController
      *      tags={"expenses"},
      *      summary="Deletes a client",
      *      description="Handles the deletion of a client by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -426,16 +437,15 @@ class ExpenseController extends BaseController
      */
     public function destroy(DestroyExpenseRequest $request, Expense $expense)
     {
-        //may not need these destroy routes as we are using actions to 'archive/delete'
-        $expense->delete();
+        $this->expense_repo->delete($expense);
 
-        return response()->json([], 200);
+        return $this->itemResponse($expense->fresh());
     }
 
     /**
      * Perform bulk actions on the list view.
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Post(
@@ -444,8 +454,7 @@ class ExpenseController extends BaseController
      *      tags={"expenses"},
      *      summary="Performs bulk actions on an array of expenses",
      *      description="",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/index"),
      *      @OA\RequestBody(
@@ -483,20 +492,56 @@ class ExpenseController extends BaseController
      *       ),
      *     )
      */
-    public function bulk()
+    public function bulk(BulkExpenseRequest $request)
     {
-        $action = request()->input('action');
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        $ids = request()->input('ids');
-        $expenses = Expense::withTrashed()->find($this->transformKeys($ids));
+        $expenses = Expense::withTrashed()->company()->find($request->ids);
 
-        $expenses->each(function ($expense, $key) use ($action) {
-            if (auth()->user()->can('edit', $expense)) {
-                $this->expense_repo->{$action}($expense);
+        if ($request->action == 'template' && $user->can('view', $expenses->first())) {
+
+            $hash_or_response = $request->boolean('send_email') ? 'email sent' : \Illuminate\Support\Str::uuid();
+
+            TemplateAction::dispatch(
+                $expenses->pluck('hashed_id')->toArray(),
+                $request->template_id,
+                Expense::class,
+                $user->id,
+                $user->company(),
+                $user->company()->db,
+                $hash_or_response,
+                $request->boolean('send_email')
+            );
+
+            return response()->json(['message' => $hash_or_response], 200);
+        }
+
+
+        if ($request->action == 'bulk_update' && $user->can('edit', $expenses->first())) {
+
+            $expenses = Expense::withTrashed()
+                    ->company()
+                    ->whereIn('id', $request->ids);
+
+            $this->expense_repo->bulkUpdate($expenses, $request->column, $request->new_value);
+
+            return $this->listResponse(Expense::query()->withTrashed()->company()->whereIn('id', $request->ids));
+
+        }
+
+        if ($request->action == 'bulk_categorize' && $user->can('edit', $expenses->first())) {
+            $this->expense_repo->categorize($expenses, $request->category_id); //@phpstan-ignore-line
+            $expenses = collect([]);
+        }
+
+        $expenses->each(function ($expense) use ($request, $user) {
+            if ($user->can('edit', $expense)) {
+                $this->expense_repo->{$request->action}($expense);
             }
         });
 
-        return $this->listResponse(Expense::withTrashed()->whereIn('id', $this->transformKeys($ids)));
+        return $this->listResponse(Expense::withTrashed()->company()->whereIn('id', $request->ids));
     }
 
     /**
@@ -507,5 +552,136 @@ class ExpenseController extends BaseController
     public function statement()
     {
         //todo
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param UploadExpenseRequest $request
+     * @param Expense $expense
+     * @return Response| \Illuminate\Http\JsonResponse
+     *
+     *
+     *
+     * @OA\Put(
+     *      path="/api/v1/expenses/{id}/upload",
+     *      operationId="uploadExpense",
+     *      tags={"expense"},
+     *      summary="Uploads a document to a expense",
+     *      description="Handles the uploading of a document to a expense",
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
+     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
+     *      @OA\Parameter(ref="#/components/parameters/include"),
+     *      @OA\Parameter(
+     *          name="id",
+     *          in="path",
+     *          description="The Expense Hashed ID",
+     *          example="D2J234DFA",
+     *          required=true,
+     *          @OA\Schema(
+     *              type="string",
+     *              format="string",
+     *          ),
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Returns the Expense object",
+     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
+     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
+     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
+     *          @OA\JsonContent(ref="#/components/schemas/Expense"),
+     *       ),
+     *       @OA\Response(
+     *          response=422,
+     *          description="Validation error",
+     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
+     *
+     *       ),
+     *       @OA\Response(
+     *           response="default",
+     *           description="Unexpected Error",
+     *           @OA\JsonContent(ref="#/components/schemas/Error"),
+     *       ),
+     *     )
+     */
+    public function upload(UploadExpenseRequest $request, Expense $expense)
+    {
+        if (!$this->checkFeature(Account::FEATURE_DOCUMENTS)) {
+            return $this->featureFailure();
+        }
+
+        if ($request->has('documents')) {
+            $this->saveDocuments($request->file('documents'), $expense, $request->has('is_public') ? $request->boolean('is_public') : null);
+        }
+
+        return $this->itemResponse($expense->fresh());
+    }
+
+    /**
+     * @OA\Post(
+     *      path="/api/v1/expenses/edocument",
+     *      operationId="edocumentExpense",
+     *      tags={"expenses"},
+     *      summary="Uploads an electronic document to a expense",
+     *      description="Handles the uploading of an electronic document to a expense",
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
+     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
+     *      @OA\Parameter(ref="#/components/parameters/include"),
+     *      @OA\RequestBody(
+     *         description="User credentials",
+     *         required=true,
+     *         @OA\MediaType(
+     *             mediaType="multipart/form-data",
+     *             @OA\Schema(
+     *                 type="array",
+     *                 @OA\Items(
+     *                     type="string",
+     *                     format="binary",
+     *                     description="The files to be uploaded",
+     *                 ),
+     *             )
+     *         )
+     *     ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Returns a HTTP status",
+     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
+     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
+     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
+     *       ),
+     *       @OA\Response(
+     *          response=422,
+     *          description="Validation error",
+     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
+     *
+     *       ),
+     *       @OA\Response(
+     *           response="default",
+     *           response="default",
+     *           description="Unexpected Error",
+     *           @OA\JsonContent(ref="#/components/schemas/Error"),
+     *       ),
+     *     )
+     */
+    public function edocument(EDocumentRequest $request)
+    {
+        $user = auth()->user();
+
+        //Handle single - or - array of uploaded files
+        $files = $request->file('documents') instanceof \Illuminate\Http\UploadedFile ? [$request->file('documents')] : (array) $request->file('documents');
+
+        foreach ($files as $file) {
+            $extension = $file->getClientOriginalExtension();
+
+            $parsed_filename = sprintf(
+                '%s.%s',
+                \Illuminate\Support\Str::random(32),
+                preg_replace('/[^a-zA-Z0-9]/', '', $extension) // Sanitize extension
+            );
+
+            ImportEDocument::dispatch($file->get(), $parsed_filename, $file->getMimeType(), $user->company());
+        }
+
+        return response()->json(['message' => 'Processing....'], 200);
     }
 }

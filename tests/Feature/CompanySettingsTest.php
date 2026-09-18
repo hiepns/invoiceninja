@@ -1,27 +1,30 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Feature;
 
 use App\DataMapper\CompanySettings;
 use App\Utils\Traits\MakesHash;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Validation\ValidationException;
 use Tests\MockAccountData;
 use Tests\TestCase;
 
 /**
- * @test
- * @covers App\Utils\Traits\CompanySettingsSaver
+ *
+ *  App\Utils\Traits\CompanySettingsSaver
  */
 class CompanySettingsTest extends TestCase
 {
@@ -29,7 +32,9 @@ class CompanySettingsTest extends TestCase
     use DatabaseTransactions;
     use MockAccountData;
 
-    public function setUp() :void
+    // use RefreshDatabase;
+
+    public function setUp(): void
     {
         parent::setUp();
 
@@ -37,7 +42,6 @@ class CompanySettingsTest extends TestCase
 
         Session::start();
 
-        $this->faker = \Faker\Factory::create();
         $this->withoutExceptionHandling();
         Model::reguard();
     }
@@ -50,15 +54,13 @@ class CompanySettingsTest extends TestCase
 
         $this->company->saveSettings($settings, $this->company);
 
-        //$this->withoutExceptionHandling();
-
         $response = false;
 
         try {
             $response = $this->withHeaders([
                 'X-API-SECRET' => config('ninja.api_secret'),
                 'X-API-Token' => $this->token,
-            ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $this->company->toArray());
+            ])->putJson('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $this->company->toArray());
         } catch (ValidationException $e) {
             $message = json_decode($e->validator->getMessageBag(), 1);
         }
@@ -80,16 +82,37 @@ class CompanySettingsTest extends TestCase
 
         $this->company->saveSettings($settings, $this->company);
 
-        $response = $this->withHeaders([
-                'X-API-SECRET' => config('ninja.api_secret'),
-                'X-API-Token' => $this->token,
-            ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $this->company->toArray());
+        $response = false;
+
+        try {
+            $response = $this->withHeaders([
+                    'X-API-SECRET' => config('ninja.api_secret'),
+                    'X-API-Token' => $this->token,
+                ])->putJson('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $this->company->toArray());
+        } catch (ValidationException $e) {
+            $message = json_decode($e->validator->getMessageBag(), 1);
+            nlog($message);
+        }
 
         $response->assertStatus(200);
 
         $arr = $response->json();
 
         $this->assertEquals($arr['data']['settings']['reset_counter_date'], '');
+    }
+
+    public function testCompanyCanSaveTranslationsAndPdfVariables(): void
+    {
+        $settings = $this->company->settings;
+        $settings->translations = (object) ['invoice' => 'Custom Company Invoice'];
+        $settings->pdf_variables = (object) ['invoice_details' => ['$invoice.number']];
+
+        $this->company->saveSettings($settings, $this->company);
+
+        $savedSettings = $this->company->fresh()->settings;
+
+        $this->assertSame('Custom Company Invoice', $savedSettings->translations->invoice);
+        $this->assertSame(['$invoice.number'], $savedSettings->pdf_variables->invoice_details);
     }
 
     public function testIntegerEdgeCases()
@@ -106,7 +129,7 @@ class CompanySettingsTest extends TestCase
         $response = $this->withHeaders([
                 'X-API-SECRET' => config('ninja.api_secret'),
                 'X-API-Token' => $this->token,
-            ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $this->company->toArray());
+            ])->putJson('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $this->company->toArray());
 
         $response->assertStatus(200);
 
@@ -132,7 +155,7 @@ class CompanySettingsTest extends TestCase
         $response = $this->withHeaders([
                 'X-API-SECRET' => config('ninja.api_secret'),
                 'X-API-Token' => $this->token,
-            ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $this->company->toArray());
+            ])->putJson('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $this->company->toArray());
 
         $response->assertStatus(200);
 
@@ -159,7 +182,7 @@ class CompanySettingsTest extends TestCase
         $response = $this->withHeaders([
                 'X-API-SECRET' => config('ninja.api_secret'),
                 'X-API-Token' => $this->token,
-            ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $this->company->toArray());
+            ])->putJson('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $this->company->toArray());
 
         $response->assertStatus(200);
 
@@ -174,6 +197,7 @@ class CompanySettingsTest extends TestCase
 
     public function testCompanyNullValueMatrixPOST()
     {
+
         $settings = CompanySettings::defaults();
         $settings->reset_counter_date = null;
 
@@ -182,7 +206,7 @@ class CompanySettingsTest extends TestCase
         $response = $this->withHeaders([
             'X-API-SECRET' => config('ninja.api_secret'),
             'X-API-Token' => $this->token,
-        ])->post('/api/v1/companies?include=company', $this->company->toArray());
+        ])->postJson('/api/v1/companies?include=company', $this->company->toArray());
 
         $arr = $response->json();
         $response->assertStatus(200);
@@ -200,7 +224,7 @@ class CompanySettingsTest extends TestCase
         $response = $this->withHeaders([
             'X-API-SECRET' => config('ninja.api_secret'),
             'X-API-Token' => $this->token,
-        ])->post('/api/v1/companies?include=company', $this->company->toArray());
+        ])->postJson('/api/v1/companies?include=company', $this->company->toArray());
 
         $arr = $response->json();
         $response->assertStatus(200);
@@ -218,7 +242,7 @@ class CompanySettingsTest extends TestCase
         $response = $this->withHeaders([
             'X-API-SECRET' => config('ninja.api_secret'),
             'X-API-Token' => $this->token,
-        ])->post('/api/v1/companies?include=company', $this->company->toArray());
+        ])->postJson('/api/v1/companies?include=company', $this->company->toArray());
 
         $arr = $response->json();
         $response->assertStatus(200);
@@ -236,7 +260,7 @@ class CompanySettingsTest extends TestCase
         $response = $this->withHeaders([
             'X-API-SECRET' => config('ninja.api_secret'),
             'X-API-Token' => $this->token,
-        ])->post('/api/v1/companies?include=company', $this->company->toArray());
+        ])->postJson('/api/v1/companies?include=company', $this->company->toArray());
 
         $arr = $response->json();
         $response->assertStatus(200);

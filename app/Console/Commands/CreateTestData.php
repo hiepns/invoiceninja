@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Console\Commands;
@@ -24,10 +25,12 @@ use App\Models\Company;
 use App\Models\CompanyToken;
 use App\Models\Country;
 use App\Models\Credit;
+use App\Models\Document;
 use App\Models\Expense;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\Quote;
+use App\Models\RecurringInvoice;
 use App\Models\Task;
 use App\Models\User;
 use App\Models\Vendor;
@@ -45,11 +48,14 @@ use Illuminate\Support\Str;
 
 class CreateTestData extends Command
 {
-    use MakesHash, GeneratesCounter;
+    use MakesHash;
+    use GeneratesCounter;
+
     /**
      * @var string
      */
     protected $description = 'Create Test Data';
+
     /**
      * @var string
      */
@@ -57,17 +63,7 @@ class CreateTestData extends Command
 
     protected $invoice_repo;
 
-    /**
-     * Create a new command instance.
-     *
-     * @param InvoiceRepository $invoice_repo
-     */
-    public function __construct(InvoiceRepository $invoice_repo)
-    {
-        parent::__construct();
-
-        $this->invoice_repo = $invoice_repo;
-    }
+    protected $count;
 
     /**
      * Execute the console command.
@@ -76,12 +72,20 @@ class CreateTestData extends Command
      */
     public function handle()
     {
-        $this->info(date('r').' Running CreateTestData...');
+        if (config('ninja.is_docker')) {
+            return;
+        }
+
+        if (! $this->confirm('Are you sure you want to inject dummy data?')) {
+            return;
+        }
+
+        $this->invoice_repo = new InvoiceRepository();
+
+        $this->info(date('r') . ' Running CreateTestData...');
         $this->count = $this->argument('count');
 
         $this->info('Warming up cache');
-
-        $this->warmCache();
 
         $this->createSmallAccount();
         $this->createMediumAccount();
@@ -111,7 +115,7 @@ class CreateTestData extends Command
             ]);
         }
 
-        $company_token = new CompanyToken;
+        $company_token = new CompanyToken();
         $company_token->user_id = $user->id;
         $company_token->company_id = $company->id;
         $company_token->account_id = $account->id;
@@ -127,20 +131,20 @@ class CreateTestData extends Command
             'is_admin' => 1,
             'is_locked' => 0,
             'notifications' => CompanySettings::notificationDefaults(),
-           // 'permissions' => '',
+            // 'permissions' => '',
             'settings' => null,
         ]);
 
         Product::factory()->count(50)->create([
-                'user_id' => $user->id,
-                'company_id' => $company->id,
-            ]);
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
 
-        $this->info('Creating '.$this->count.' clients');
+        $this->info('Creating ' . $this->count . ' clients');
 
         for ($x = 0; $x < $this->count; $x++) {
             $z = $x + 1;
-            $this->info('Creating client # '.$z);
+            $this->info('Creating client # ' . $z);
 
             $this->createClient($company, $user);
         }
@@ -148,37 +152,37 @@ class CreateTestData extends Command
         for ($x = 0; $x < $this->count; $x++) {
             $client = $company->clients->random();
 
-            $this->info('creating invoice for client #'.$client->id);
+            $this->info('creating invoice for client #' . $client->id);
             $this->createInvoice($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating credit for client #'.$client->id);
+            $this->info('creating credit for client #' . $client->id);
             $this->createCredit($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating quote for client #'.$client->id);
+            $this->info('creating quote for client #' . $client->id);
             $this->createQuote($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating expense for client #'.$client->id);
+            $this->info('creating expense for client #' . $client->id);
             $this->createExpense($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating vendor for client #'.$client->id);
+            $this->info('creating vendor for client #' . $client->id);
             $this->createVendor($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating task for client #'.$client->id);
+            $this->info('creating task for client #' . $client->id);
             $this->createTask($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating project for client #'.$client->id);
+            $this->info('creating project for client #' . $client->id);
             $this->createProject($client);
         }
     }
@@ -206,7 +210,7 @@ class CreateTestData extends Command
             ]);
         }
 
-        $company_token = new CompanyToken;
+        $company_token = new CompanyToken();
         $company_token->user_id = $user->id;
         $company_token->company_id = $company->id;
         $company_token->account_id = $account->id;
@@ -221,22 +225,22 @@ class CreateTestData extends Command
             'is_admin' => 1,
             'is_locked' => 0,
             'notifications' => CompanySettings::notificationDefaults(),
-         //   'permissions' => '',
+            //   'permissions' => '',
             'settings' => null,
         ]);
 
         Product::factory()->count(50)->create([
-                'user_id' => $user->id,
-                'company_id' => $company->id,
-            ]);
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
 
         $this->count = $this->count * 10;
 
-        $this->info('Creating '.$this->count.' clients');
+        $this->info('Creating ' . $this->count . ' clients');
 
         for ($x = 0; $x < $this->count; $x++) {
             $z = $x + 1;
-            $this->info('Creating client # '.$z);
+            $this->info('Creating client # ' . $z);
 
             $this->createClient($company, $user);
         }
@@ -244,37 +248,37 @@ class CreateTestData extends Command
         for ($x = 0; $x < $this->count * 100; $x++) {
             $client = $company->clients->random();
 
-            $this->info('creating invoice for client #'.$client->id);
+            $this->info('creating invoice for client #' . $client->id);
             $this->createInvoice($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating credit for client #'.$client->id);
+            $this->info('creating credit for client #' . $client->id);
             $this->createCredit($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating quote for client #'.$client->id);
+            $this->info('creating quote for client #' . $client->id);
             $this->createQuote($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating expense for client #'.$client->id);
+            $this->info('creating expense for client #' . $client->id);
             $this->createExpense($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating vendor for client #'.$client->id);
+            $this->info('creating vendor for client #' . $client->id);
             $this->createVendor($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating task for client #'.$client->id);
+            $this->info('creating task for client #' . $client->id);
             $this->createTask($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating project for client #'.$client->id);
+            $this->info('creating project for client #' . $client->id);
             $this->createProject($client);
         }
     }
@@ -303,7 +307,7 @@ class CreateTestData extends Command
             ]);
         }
 
-        $company_token = new CompanyToken;
+        $company_token = new CompanyToken();
         $company_token->user_id = $user->id;
         $company_token->company_id = $company->id;
         $company_token->account_id = $account->id;
@@ -318,22 +322,22 @@ class CreateTestData extends Command
             'is_admin' => 1,
             'is_locked' => 0,
             'notifications' => CompanySettings::notificationDefaults(),
-         //   'permissions' => '',
+            //   'permissions' => '',
             'settings' => null,
         ]);
 
         Product::factory()->count(15000)->create([
-                'user_id' => $user->id,
-                'company_id' => $company->id,
-            ]);
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
 
         $this->count = $this->count * 10;
 
-        $this->info('Creating '.$this->count.' clients');
+        $this->info('Creating ' . $this->count . ' clients');
 
-        for ($x = 0; $x < $this->count * 500; $x++) {
+        for ($x = 0; $x < $this->count * 100; $x++) {
             $z = $x + 1;
-            $this->info('Creating client # '.$z);
+            $this->info('Creating client # ' . $z);
 
             $this->createClient($company, $user);
         }
@@ -341,66 +345,72 @@ class CreateTestData extends Command
         for ($x = 0; $x < $this->count; $x++) {
             $client = $company->clients->random();
 
-            $this->info('creating invoice for client #'.$client->id);
+            $this->info('creating invoice for client #' . $client->id);
             $this->createInvoice($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating credit for client #'.$client->id);
+            $this->info('creating credit for client #' . $client->id);
             $this->createCredit($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating quote for client #'.$client->id);
+            $this->info('creating quote for client #' . $client->id);
             $this->createQuote($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating expense for client #'.$client->id);
+            $this->info('creating expense for client #' . $client->id);
             $this->createExpense($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating vendor for client #'.$client->id);
+            $this->info('creating vendor for client #' . $client->id);
             $this->createVendor($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating task for client #'.$client->id);
+            $this->info('creating task for client #' . $client->id);
             $this->createTask($client);
 
             $client = $company->clients->random();
 
-            $this->info('creating project for client #'.$client->id);
+            $this->info('creating project for client #' . $client->id);
             $this->createProject($client);
         }
     }
 
     private function createClient($company, $user)
     {
-
         // dispatch(function () use ($company, $user) {
 
         // });
         $client = Client::factory()->create([
-                'user_id' => $user->id,
-                'company_id' => $company->id,
-            ]);
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
+
+        Document::factory()->count(50)->create([
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+            'documentable_type' => Client::class,
+            'documentable_id' => $client->id,
+        ]);
 
         ClientContact::factory()->create([
-                    'user_id' => $user->id,
-                    'client_id' => $client->id,
-                    'company_id' => $company->id,
-                    'is_primary' => 1,
-                ]);
+            'user_id' => $user->id,
+            'client_id' => $client->id,
+            'company_id' => $company->id,
+            'is_primary' => 1,
+        ]);
 
         ClientContact::factory()->count(rand(1, 5))->create([
-                    'user_id' => $user->id,
-                    'client_id' => $client->id,
-                    'company_id' => $company->id,
-                ]);
+            'user_id' => $user->id,
+            'client_id' => $client->id,
+            'company_id' => $company->id,
+        ]);
 
-        $client->id_number = $this->getNextClientNumber($client);
+        $client->number = $this->getNextClientNumber($client);
 
         $settings = $client->settings;
         $settings->currency_id = (string) rand(1, 79);
@@ -415,48 +425,69 @@ class CreateTestData extends Command
     private function createExpense($client)
     {
         Expense::factory()->count(rand(1, 5))->create([
-                'user_id' => $client->user->id,
-                'client_id' => $client->id,
-                'company_id' => $client->company->id,
-            ]);
+            'user_id' => $client->user->id,
+            'client_id' => $client->id,
+            'company_id' => $client->company->id,
+        ]);
     }
 
     private function createVendor($client)
     {
         $vendor = Vendor::factory()->create([
-                'user_id' => $client->user->id,
-                'company_id' => $client->company->id,
-            ]);
+            'user_id' => $client->user->id,
+            'company_id' => $client->company->id,
+        ]);
+
+        Document::factory()->count(1)->create([
+            'user_id' => $client->user->id,
+            'company_id' => $client->company_id,
+            'documentable_type' => Vendor::class,
+            'documentable_id' => $vendor->id,
+        ]);
 
         VendorContact::factory()->create([
-                'user_id' => $client->user->id,
-                'vendor_id' => $vendor->id,
-                'company_id' => $client->company->id,
-                'is_primary' => 1,
-            ]);
+            'user_id' => $client->user->id,
+            'vendor_id' => $vendor->id,
+            'company_id' => $client->company->id,
+            'is_primary' => 1,
+        ]);
 
         VendorContact::factory()->count(rand(1, 5))->create([
-                'user_id' => $client->user->id,
-                'vendor_id' => $vendor->id,
-                'company_id' => $client->company->id,
-                'is_primary' => 0,
-            ]);
+            'user_id' => $client->user->id,
+            'vendor_id' => $vendor->id,
+            'company_id' => $client->company->id,
+            'is_primary' => 0,
+        ]);
     }
 
     private function createTask($client)
     {
         $vendor = Task::factory()->create([
-                'user_id' => $client->user->id,
-                'company_id' => $client->company->id,
-            ]);
+            'user_id' => $client->user->id,
+            'company_id' => $client->company->id,
+        ]);
+
+        Document::factory()->count(5)->create([
+            'user_id' => $client->user->id,
+            'company_id' => $client->company_id,
+            'documentable_type' => Task::class,
+            'documentable_id' => $vendor->id,
+        ]);
     }
 
     private function createProject($client)
     {
         $vendor = Project::factory()->create([
-                'user_id' => $client->user->id,
-                'company_id' => $client->company->id,
-            ]);
+            'user_id' => $client->user->id,
+            'company_id' => $client->company->id,
+        ]);
+
+        Document::factory()->count(5)->create([
+            'user_id' => $client->user->id,
+            'company_id' => $client->company_id,
+            'documentable_type' => Project::class,
+            'documentable_id' => $vendor->id,
+        ]);
     }
 
     private function createInvoice($client)
@@ -465,7 +496,7 @@ class CreateTestData extends Command
 
         $invoice = InvoiceFactory::create($client->company->id, $client->user->id); //stub the company and user_id
         $invoice->client_id = $client->id;
-//        $invoice->date = $faker->date();
+        //        $invoice->date = $faker->date();
         $dateable = Carbon::now()->subDays(rand(0, 90));
         $invoice->date = $dateable;
 
@@ -487,7 +518,7 @@ class CreateTestData extends Command
             $invoice->tax_rate3 = 5;
         }
 
-        $invoice->custom_value1 = $faker->date;
+        $invoice->custom_value1 = $faker->date();
         $invoice->custom_value2 = rand(0, 1) ? 'yes' : 'no';
 
         $invoice->save();
@@ -500,11 +531,22 @@ class CreateTestData extends Command
         $invoice->save();
         $invoice->service()->createInvitations()->markSent();
 
-        $this->invoice_repo->markSent($invoice);
+        if (rand(0, 1)) {
+            $this->invoice_repo->markSent($invoice);
+        }
 
         if (rand(0, 1)) {
             $invoice = $invoice->service()->markPaid()->save();
         }
+
+        Document::factory()->count(5)->create([
+            'user_id' => $invoice->user->id,
+            'company_id' => $invoice->company_id,
+            'documentable_type' => Invoice::class,
+            'documentable_id' => $invoice->id,
+        ]);
+
+        RecurringInvoice::factory()->create(['user_id' => $invoice->user->id, 'company_id' => $invoice->company->id, 'client_id' => $invoice->client_id]);
 
         event(new InvoiceWasCreated($invoice, $invoice->company, Ninja::eventVars()));
     }
@@ -630,31 +672,4 @@ class CreateTestData extends Command
         return $line_items;
     }
 
-    private function warmCache()
-    {
-        /* Warm up the cache !*/
-        $cached_tables = config('ninja.cached_tables');
-
-        foreach ($cached_tables as $name => $class) {
-            if (! Cache::has($name)) {
-                // check that the table exists in case the migration is pending
-                if (! Schema::hasTable((new $class())->getTable())) {
-                    continue;
-                }
-                if ($name == 'payment_terms') {
-                    $orderBy = 'num_days';
-                } elseif ($name == 'fonts') {
-                    $orderBy = 'sort_order';
-                } elseif (in_array($name, ['currencies', 'industries', 'languages', 'countries', 'banks'])) {
-                    $orderBy = 'name';
-                } else {
-                    $orderBy = 'id';
-                }
-                $tableData = $class::orderBy($orderBy)->get();
-                if ($tableData->count()) {
-                    Cache::forever($name, $tableData);
-                }
-            }
-        }
-    }
 }

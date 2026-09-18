@@ -1,23 +1,21 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Jobs\Entity;
 
-use App\Events\Invoice\InvoiceReminderWasEmailed;
-use App\Events\Invoice\InvoiceWasEmailed;
-use App\Events\Invoice\InvoiceWasEmailedAndFailed;
-use App\Jobs\Mail\BaseMailerJob;
+use App\Jobs\Mail\NinjaMailerJob;
+use App\Jobs\Mail\NinjaMailerObject;
 use App\Libraries\MultiDB;
 use App\Mail\TemplateEmail;
-use App\Models\Activity;
 use App\Models\Company;
 use App\Models\CreditInvitation;
 use App\Models\InvoiceInvitation;
@@ -30,57 +28,63 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Str;
 
 /*Multi Mailer implemented*/
 
-class EmailEntity extends BaseMailerJob implements ShouldQueue
+class EmailEntity implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
-    public $invitation;
+    public $invitation; //The entity invitation
 
-    public $company;
+    public $company; //The company
 
-    public $settings;
+    public $settings; //The settings object
 
-    public $entity_string;
+    public $entity_string; //The entity string ie. invoice, quote, credit
 
-    public $reminder_template;
+    public $reminder_template; //The base template we are using
 
-    public $entity;
+    public $entity; //The entity object
 
-    public $html_engine;
+    public $html_engine; //The HTMLEngine object
 
-    public $email_entity_builder;
+    public $email_entity_builder; //The email builder which merges the template and text
 
-    public $template_data;
+    public $template_data; //The data to be merged into the template
+
+    public $tries = 1;
+
+    public string $db;
     /**
      * EmailEntity constructor.
-     * @param Invitation $invitation
-     * @param Company    $company
+     *
+     * @param mixed $invitation
      * @param ?string    $reminder_template
+     * @param array      $template_data
      */
-    public function __construct($invitation, Company $company, ?string $reminder_template = null, $template_data = null)
+    public function __construct($invitation, string $db, ?string $reminder_template = null, $template_data = null)
     {
-        $this->company = $company;
+        $this->db = $db;
 
         $this->invitation = $invitation;
-
-        $this->settings = $invitation->contact->client->getMergedSettings();
 
         $this->entity_string = $this->resolveEntityString();
 
         $this->entity = $invitation->{$this->entity_string};
+
+        $this->settings = $invitation->contact->client->getMergedSettings();
 
         $this->reminder_template = $reminder_template ?: $this->entity->calculateTemplate($this->entity_string);
 
         $this->html_engine = new HtmlEngine($invitation);
 
         $this->template_data = $template_data;
-
-        $this->email_entity_builder = $this->resolveEmailBuilder();
     }
 
     /**
@@ -89,41 +93,59 @@ class EmailEntity extends BaseMailerJob implements ShouldQueue
      *
      * @return void
      */
-    public function handle()
+    public function handle(): void
     {
-        if ($this->company->is_disabled) {
-            return true;
-        }
-        
-        MultiDB::setDB($this->company->db);
 
-        $this->setMailDriver();
+        /* Set DB */
+        MultiDB::setDB($this->db);
 
-        try {
-            /** @noinspection PhpMethodParametersCountMismatchInspection */
-            Mail::to($this->invitation->contact->email, $this->invitation->contact->present()->name())
-                ->send(
-                    new TemplateEmail(
-                        $this->email_entity_builder,
-                        $this->invitation->contact->user,
-                        $this->invitation->contact->client
-                    )
-                );
-        } catch (\Exception $e) {
-            $this->failed($e);
-            $this->entityEmailFailed($e->getMessage());
-            $this->logMailError($e->getMessage(), $this->entity->client);
+        /* Don't fire emails if the company is disabled */
+        if ($this->invitation->company->is_disabled) {
+            return;
         }
 
-        if (count(Mail::failures()) == 0) {
-            $this->entityEmailSucceeded();
-        }
+        $this->email_entity_builder = $this->resolveEmailBuilder();
+
+        App::forgetInstance('translator');
+        $t = app('translator');
+        App::setLocale($this->invitation->contact->preferredLocale());
+        $t->replace(Ninja::transformTranslations($this->settings));
 
         /* Mark entity sent */
         $this->entity->service()->markSent()->save();
+
+        $nmo = new NinjaMailerObject();
+        $nmo->mailable = new TemplateEmail($this->email_entity_builder, $this->invitation->contact->withoutRelations(), $this->invitation->withoutRelations());
+        $nmo->company = $this->invitation->company->withoutRelations();
+        $nmo->settings = $this->settings;
+        $nmo->to_user = $this->invitation->contact->withoutRelations();
+        $nmo->entity_string = $this->entity_string;
+        $nmo->invitation = $this->invitation->withoutRelations();
+        $nmo->reminder_template = $this->reminder_template;
+        $nmo->entity = $this->entity->withoutRelations();
+
+        /* CC-only contacts receive one copy only — attached to the first invitation for this entity */
+        if ($this->isFirstInvitation() && (Ninja::isSelfHost() || $this->invitation->company->account->isPremium())) {
+            if ($this->entity->client ?? null) {
+                $nmo->cc = $this->entity->client->cc_contacts();
+            }
+        }
+
+        NinjaMailerJob::dispatch($nmo);
+
+        $nmo = null;
+        $this->invitation = null;
+        $this->company = null;
+        $this->entity_string = null;
+        $this->entity = null;
+        $this->settings = null;
+        $this->reminder_template = null;
+        $this->html_engine = null;
+        $this->template_data = null;
+        $this->email_entity_builder = null;
     }
 
-    private function resolveEntityString() :string
+    private function resolveEntityString(): string
     {
         if ($this->invitation instanceof InvoiceInvitation) {
             return 'invoice';
@@ -134,49 +156,30 @@ class EmailEntity extends BaseMailerJob implements ShouldQueue
         } elseif ($this->invitation instanceof RecurringInvoiceInvitation) {
             return 'recurring_invoice';
         }
+
+        return '';
     }
 
-    private function entityEmailFailed($message)
+    /**
+     * Determines if this invitation is the first for its parent entity.
+     * Used to ensure cc_only contacts are only CC'd once per entity send.
+     */
+    private function isFirstInvitation(): bool
     {
-        switch ($this->entity_string) {
-            case 'invoice':
-                event(new InvoiceWasEmailedAndFailed($this->invitation->invoice, $this->company, $message, Ninja::eventVars()));
-                break;
-
-            default:
-                # code...
-                break;
-        }
+        return $this->entity->invitations()->orderBy('id')->first()?->id === $this->invitation->id;
     }
 
-    private function entityEmailSucceeded()
-    {
-        switch ($this->reminder_template) {
-            case 'invoice':
-                event(new InvoiceWasEmailed($this->invitation, $this->company, Ninja::eventVars()));
-                break;
-            case 'reminder1':
-                event(new InvoiceReminderWasEmailed($this->invitation, $this->company, Ninja::eventVars(), Activity::INVOICE_REMINDER1_SENT));
-                break;
-            case 'reminder2':
-                event(new InvoiceReminderWasEmailed($this->invitation, $this->company, Ninja::eventVars(), Activity::INVOICE_REMINDER2_SENT));
-                break;
-            case 'reminder3':
-                event(new InvoiceReminderWasEmailed($this->invitation, $this->company, Ninja::eventVars(), Activity::INVOICE_REMINDER3_SENT));
-                break;
-            case 'reminder_endless':
-                event(new InvoiceReminderWasEmailed($this->invitation, $this->company, Ninja::eventVars(), Activity::INVOICE_REMINDER_ENDLESS_SENT));
-                break;
-            default:
-                # code...
-                break;
-        }
-    }
-
+    /* Builds the email builder object */
     private function resolveEmailBuilder()
     {
-        $class = 'App\Mail\Engine\\' . ucfirst(Str::camel($this->entity_string)) . "EmailEngine";
+        $class = 'App\Mail\Engine\\' . ucfirst(Str::camel($this->entity_string)) . 'EmailEngine';
 
         return (new $class($this->invitation, $this->reminder_template, $this->template_data))->build();
+    }
+
+    public function failed($e)
+    {
+        nlog("EmailEntity");
+        nlog($e->getMessage());
     }
 }

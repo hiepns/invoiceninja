@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
@@ -31,7 +32,7 @@ class TemplateController extends BaseController
     /**
      * Returns a template filled with entity variables.
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      * @OA\Post(
      *      path="/api/v1/templates",
@@ -39,7 +40,6 @@ class TemplateController extends BaseController
      *      tags={"templates"},
      *      summary="Returns a entity template with the template variables replaced with the Entities",
      *      description="Returns a entity template with the template variables replaced with the Entities",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\RequestBody(
      *         description="The template subject and body",

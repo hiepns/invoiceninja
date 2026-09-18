@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules;
@@ -33,10 +34,10 @@ class PaymentAmountsBalanceRule implements Rule
      */
     public function message()
     {
-        return 'Amounts do not balance correctly.';
+        return ctrans('texts.amounts_do_not_balance');
     }
 
-    private function calculateAmounts() :bool
+    private function calculateAmounts(): bool
     {
         /*
          * Sometimes the request may not contain the amount or it may be zero,
@@ -48,7 +49,7 @@ class PaymentAmountsBalanceRule implements Rule
             return true;
         }
 
-        if (request()->has('amount') && request()->input('amount') == 0) {
+        if (request()->input('amount') == 0) {
             return true;
         }
 
@@ -59,21 +60,22 @@ class PaymentAmountsBalanceRule implements Rule
 
         if (request()->input('credits') && is_array(request()->input('credits'))) {
             foreach (request()->input('credits') as $credit) {
-                $payment_amounts += $credit['amount'];
+                if (array_key_exists('amount', $credit)) {
+                    $payment_amounts += $credit['amount'];
+                }
             }
         }
 
         if (request()->input('invoices') && is_array(request()->input('invoices'))) {
             foreach (request()->input('invoices') as $invoice) {
-                $invoice_amounts += $invoice['amount'];
+                if (array_key_exists('amount', $invoice)) {
+                    $invoice_amounts += $invoice['amount'];
+                }
             }
         } else {
             return true;
-        } // if no invoices are present, then this is an unapplied payment, let this pass validation!
+        }
 
-        // info("payment amounts = {$payment_amounts}");
-        // info("invoice amounts = {$invoice_amounts}");
-
-        return  $payment_amounts >= $invoice_amounts;
+        return round($payment_amounts, 2) >= round($invoice_amounts, 2);
     }
 }

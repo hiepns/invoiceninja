@@ -1,2 +1,97 @@
-/*! For license information please see stripe-ach.js.LICENSE.txt */
-!function(e){var t={};function n(r){if(t[r])return t[r].exports;var o=t[r]={i:r,l:!1,exports:{}};return e[r].call(o.exports,o,o.exports,n),o.l=!0,o.exports}n.m=e,n.c=t,n.d=function(e,t,r){n.o(e,t)||Object.defineProperty(e,t,{enumerable:!0,get:r})},n.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},n.t=function(e,t){if(1&t&&(e=n(e)),8&t)return e;if(4&t&&"object"==typeof e&&e&&e.__esModule)return e;var r=Object.create(null);if(n.r(r),Object.defineProperty(r,"default",{enumerable:!0,value:e}),2&t&&"string"!=typeof e)for(var o in e)n.d(r,o,function(t){return e[t]}.bind(null,o));return r},n.n=function(e){var t=e&&e.__esModule?function(){return e.default}:function(){return e};return n.d(t,"a",t),t},n.o=function(e,t){return Object.prototype.hasOwnProperty.call(e,t)},n.p="/",n(n.s=3)}({3:function(e,t,n){e.exports=n("M5il")},M5il:function(e,t){function n(e,t){for(var n=0;n<t.length;n++){var r=t[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(e,r.key,r)}}function r(e,t,n){return t in e?Object.defineProperty(e,t,{value:n,enumerable:!0,configurable:!0,writable:!0}):e[t]=n,e}(new(function(){function e(){var t=this;!function(e,t){if(!(e instanceof t))throw new TypeError("Cannot call a class as a function")}(this,e),r(this,"setupStripe",(function(){return t.stripe=Stripe(t.key),t})),r(this,"getFormData",(function(){return{country:document.getElementById("country").value,currency:document.getElementById("currency").value,routing_number:document.getElementById("routing-number").value,account_number:document.getElementById("account-number").value,account_holder_name:document.getElementById("account-holder-name").value,account_holder_type:document.querySelector('input[name="account-holder-type"]:checked').value}})),r(this,"handleError",(function(e){document.getElementById("save-button").disabled=!1,document.querySelector("#save-button > svg").classList.add("hidden"),document.querySelector("#save-button > span").classList.remove("hidden"),t.errors.textContent="",t.errors.textContent=e,t.errors.hidden=!1})),r(this,"handleSuccess",(function(e){document.getElementById("gateway_response").value=JSON.stringify(e),document.getElementById("server_response").submit()})),r(this,"handleSubmit",(function(e){document.getElementById("save-button").disabled=!0,document.querySelector("#save-button > svg").classList.remove("hidden"),document.querySelector("#save-button > span").classList.add("hidden"),e.preventDefault(),t.errors.textContent="",t.errors.hidden=!0,t.stripe.createToken("bank_account",t.getFormData()).then((function(e){return e.hasOwnProperty("error")?t.handleError(e.error.message):t.handleSuccess(e)}))})),this.errors=document.getElementById("errors"),this.key=document.querySelector('meta[name="stripe-publishable-key"]').content}var t,o,u;return t=e,(o=[{key:"handle",value:function(){var e=this;document.getElementById("save-button").addEventListener("click",(function(t){return e.handleSubmit(t)}))}}])&&n(t.prototype,o),u&&n(t,u),e}())).setupStripe().handle()}});
+/******/ (() => { // webpackBootstrap
+var __webpack_exports__ = {};
+/*!*****************************************************!*\
+  !*** ./resources/js/clients/payments/stripe-ach.js ***!
+  \*****************************************************/
+function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, _toPropertyKey(descriptor.key), descriptor); } }
+function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); Object.defineProperty(Constructor, "prototype", { writable: false }); return Constructor; }
+function _defineProperty(obj, key, value) { key = _toPropertyKey(key); if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return _typeof(key) === "symbol" ? key : String(key); }
+function _toPrimitive(input, hint) { if (_typeof(input) !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (_typeof(res) !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
+/**
+ * Invoice Ninja (https://invoiceninja.com)
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license 
+ */
+var AuthorizeACH = /*#__PURE__*/function () {
+  function AuthorizeACH() {
+    var _this = this,
+      _document$querySelect;
+    _classCallCheck(this, AuthorizeACH);
+    _defineProperty(this, "setupStripe", function () {
+      if (_this.stripeConnect) {
+        // this.stripe.stripeAccount = this.stripeConnect;
+
+        _this.stripe = Stripe(_this.key, {
+          stripeAccount: _this.stripeConnect
+        });
+      } else {
+        _this.stripe = Stripe(_this.key);
+      }
+      return _this;
+    });
+    _defineProperty(this, "getFormData", function () {
+      return {
+        country: document.getElementById('country').value,
+        currency: document.getElementById('currency').value,
+        routing_number: document.getElementById('routing-number').value,
+        account_number: document.getElementById('account-number').value,
+        account_holder_name: document.getElementById('account-holder-name').value,
+        account_holder_type: document.querySelector('input[name="account-holder-type"]:checked').value
+      };
+    });
+    _defineProperty(this, "handleError", function (message) {
+      document.getElementById('save-button').disabled = false;
+      document.querySelector('#save-button > svg').classList.add('hidden');
+      document.querySelector('#save-button > span').classList.remove('hidden');
+      _this.errors.textContent = '';
+      _this.errors.textContent = message;
+      _this.errors.hidden = false;
+    });
+    _defineProperty(this, "handleSuccess", function (response) {
+      document.getElementById('gateway_response').value = JSON.stringify(response);
+      document.getElementById('server_response').submit();
+    });
+    _defineProperty(this, "handleSubmit", function (e) {
+      if (!document.getElementById('accept-terms').checked) {
+        errors.textContent = "You must accept the mandate terms prior to making payment.";
+        errors.hidden = false;
+        return;
+      }
+      document.getElementById('save-button').disabled = true;
+      document.querySelector('#save-button > svg').classList.remove('hidden');
+      document.querySelector('#save-button > span').classList.add('hidden');
+      e.preventDefault();
+      _this.errors.textContent = '';
+      _this.errors.hidden = true;
+      _this.stripe.createToken('bank_account', _this.getFormData()).then(function (result) {
+        if (result.hasOwnProperty('error')) {
+          return _this.handleError(result.error.message);
+        }
+        return _this.handleSuccess(result);
+      });
+    });
+    this.errors = document.getElementById('errors');
+    this.key = document.querySelector('meta[name="stripe-publishable-key"]').content;
+    this.stripe_connect = (_document$querySelect = document.querySelector('meta[name="stripe-account-id"]')) === null || _document$querySelect === void 0 ? void 0 : _document$querySelect.content;
+  }
+  _createClass(AuthorizeACH, [{
+    key: "handle",
+    value: function handle() {
+      var _this2 = this;
+      document.getElementById('save-button').addEventListener('click', function (e) {
+        return _this2.handleSubmit(e);
+      });
+    }
+  }]);
+  return AuthorizeACH;
+}();
+new AuthorizeACH().setupStripe().handle();
+/******/ })()
+;

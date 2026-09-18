@@ -1,4 +1,4 @@
-@extends('portal.ninja2020.layout.clean')
+@extends('setup.clean_setup')
 @section('meta_title', ctrans('texts.setup'))
 
 @section('body')
@@ -10,7 +10,12 @@
             <div class="col-span-12 md:col-start-4 md:col-span-6 mt-4 md:mt-10">
                 <h1 class="text-center text-2xl font-semibold">Invoice Ninja Setup</h1>
                 <p class="text-sm text-center">{{ ctrans('texts.if_you_need_help') }}
-                    <a href="https://www.invoiceninja.com/forums/forum/support/" class="button-link">{{ ctrans('texts.support_forum') }}</a>
+                    <a 
+                        target="_blank" 
+                        href="https://forum.invoiceninja.com" 
+                        class="button-link underline">
+                        {{ ctrans('texts.support_forum') }}
+                    </a>
                 </p>
 
                 @if($errors->any())
@@ -46,24 +51,28 @@
                     </div>
                     @endif
 
-                    @include('setup._application')
                     @include('setup._database')
-                    @include('setup._mail')
                     @include('setup._account')
 
-                    <div class="flex justify-center mt-4">
+                    <p class="mt-4 text-sm">{{ ctrans('texts.setup_steps_notice') }}</p>
+
+                    <div class="flex justify-center mt-4 hidden" id="submit-wrapper">
                         <div class="flex flex-col">
                             <div class="mt-4 text-sm">
-                                <input type="checkbox" class="form-checkbox mr-2" name="terms_of_service" required>
-                                <span>{{ ctrans('texts.i_agree') }}
-                                    <a class="button-link" href="https://www.invoiceninja.com/self-hosting-terms-service/">{{ ctrans('texts.terms_of_service') }}</a>
-                                </span>
+                                <label for="terms_of_service">
+                                    <input type="checkbox" class="form-checkbox mr-2" name="terms_of_service" id="terms_of_service" required>
+                                    <span>{{ ctrans('texts.i_agree') }}
+                                        <a class="button-link text-blue-600" target="_blank" href="https://www.invoiceninja.com/self-hosting-terms-service/">{{ ctrans('texts.terms_of_service') }}</a>
+                                    </span>
+                                </label>
                             </div>
                             <div class="mt-2 text-sm">
-                                <input type="checkbox" class="form-checkbox mr-2" name="privacy_policy" required>
-                                <span>{{ ctrans('texts.i_agree') }}
-                                    <a class="button-link" href="https://www.invoiceninja.com/self-hosting-privacy-data-control/">{{ ctrans('texts.privacy_policy') }}</a>
-                                </span>
+                                <label for="privacy_policy">
+                                    <input type="checkbox" class="form-checkbox mr-2" name="privacy_policy" id="privacy_policy" required>
+                                    <span>{{ ctrans('texts.i_agree') }}
+                                        <a class="button-link text-blue-600" target="_blank" href="https://www.invoiceninja.com/self-hosting-privacy-data-control/">{{ ctrans('texts.privacy_policy') }}</a>
+                                    </span>
+                                </label>
                             </div>
 
                             <button type="submit" class="button button-primary bg-blue-600 w-1/2 my-4">{{ ctrans('texts.submit') }}</button>
@@ -77,5 +86,5 @@
 @endsection
 
 @push('footer')
-    <script src="{{ asset('js/setup/setup.js') }}"></script>
+    @vite('resources/js/setup/setup.js')
 @endpush

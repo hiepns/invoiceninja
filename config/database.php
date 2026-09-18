@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'db-ninja-01'),
+    'default' => env('DB_CONNECTION', 'mysql'),
 
     /*
     |--------------------------------------------------------------------------
@@ -35,17 +35,19 @@ return [
 
         // single database setup
         'mysql' => [
-            'driver'    => 'mysql',
-            'host'      => env('DB_HOST1', '127.0.0.1'),
-            'database'  => env('DB_DATABASE1', 'forge'),
-            'username'  => env('DB_USERNAME1', 'forge'),
-            'password'  => env('DB_PASSWORD1', ''),
-            'port'      => env('DB_PORT1', '3306'),
-            'charset'   => 'utf8mb4',
-            'collation' => 'utf8mb4_unicode_ci',
-            'prefix'    => '',
-            'strict'    => env('DB_STRICT', false),
-            'engine'    => 'InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8',
+            'driver'         => 'mysql',
+            'host'           => env('DB_HOST1', env('DB_HOST', '127.0.0.1')),
+            'database'       => env('DB_DATABASE1', env('DB_DATABASE', 'forge')),
+            'username'       => env('DB_USERNAME1', env('DB_USERNAME', 'forge')),
+            'password'       => env('DB_PASSWORD1', env('DB_PASSWORD', '')),
+            'port'           => env('DB_PORT1', env('DB_PORT', '3306')),
+            'unix_socket'    => env('DB_SOCKET1', env('DB_SOCKET', '')),
+            'charset'        => 'utf8mb4',
+            'collation'      => 'utf8mb4_unicode_ci',
+            'prefix'         => '',
+            'prefix_indexes' => true,
+            'strict'         => env('DB_STRICT', false),
+            'engine'         => 'InnoDB',
         ],
 
         'sqlite' => [
@@ -64,7 +66,7 @@ return [
             'charset'        => 'utf8',
             'prefix'         => '',
             'prefix_indexes' => true,
-            'schema'         => 'public',
+            'search_path'         => 'public',
             'sslmode'        => 'prefer',
         ],
 
@@ -92,7 +94,8 @@ return [
             'prefix'         => '',
             'prefix_indexes' => true,
             'strict'         => env('DB_STRICT', false),
-            'engine'    => 'InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8',
+            'engine'         => 'InnoDB ROW_FORMAT=DYNAMIC',
+            'options'        => [],
         ],
 
         'db-ninja-02' => [
@@ -107,7 +110,24 @@ return [
             'prefix'         => '',
             'prefix_indexes' => true,
             'strict'         => env('DB_STRICT', false),
-            'engine'    => 'InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8',
+            'engine'         => 'InnoDB ROW_FORMAT=DYNAMIC',
+            'options'        => [],
+        ],
+
+        'db-ninja-03' => [
+            'driver'         => 'mysql',
+            'host'           => env('DB_HOST3', env('DB_HOST', '127.0.0.1')),
+            'database'       => env('DB_DATABASE3', env('DB_DATABASE', 'forge')),
+            'username'       => env('DB_USERNAME3', env('DB_USERNAME', 'forge')),
+            'password'       => env('DB_PASSWORD3', env('DB_PASSWORD', '')),
+            'port'           => env('DB_PORT3', env('DB_PORT', '3306')),
+            'charset'        => 'utf8mb4',
+            'collation'      => 'utf8mb4_unicode_ci',
+            'prefix'         => '',
+            'prefix_indexes' => true,
+            'strict'         => env('DB_STRICT', false),
+            'engine'         => 'InnoDB ROW_FORMAT=DYNAMIC',
+            'options'        => [],
         ],
     ],
 
@@ -153,6 +173,53 @@ return [
             'database' => env('REDIS_CACHE_DB', 1),
         ],
 
+        'sentinel-default' => array_merge(
+            array_map(
+                function ($a, $b) {
+                    return ['host' => $a, 'port' => $b];
+                },
+                explode(',', env('REDIS_HOST', 'localhost')),
+                explode(',', env('REDIS_PORT', 26379))
+            ),
+            ['options' => [
+                'replication' => 'sentinel',
+                'service' =>  env('REDIS_SENTINEL_SERVICE', 'mymaster'),
+                'sentinel_timeout' => 3.0,
+                // 'load_balancing' => false,
+                'parameters' => [
+                    'password' => env('REDIS_PASSWORD', null),
+                    'database' => env('REDIS_DB', 0),
+                ],
+            ]]
+        ),
+
+        'sentinel-cache' => array_merge(
+            array_map(
+                function ($a, $b) {
+                    return ['host' => $a, 'port' => $b];
+                },
+                explode(',', env('REDIS_HOST', 'localhost')),
+                explode(',', env('REDIS_PORT', 26379))
+            ),
+            ['options' => [
+                'replication' => 'sentinel',
+                'service' =>  env('REDIS_SENTINEL_SERVICE', 'mymaster'),
+                'sentinel_timeout' => 3.0,
+                'parameters' => [
+                    'password' => env('REDIS_PASSWORD', null),
+                    'database' => env('REDIS_CACHE_DB', 1),
+                ],
+            ]]
+        ),
+
     ],
 
 ];
+
+/**
+*'replication' => function () {
+*    $strategy = new Predis\Replication\ReplicationStrategy();
+*    $strategy->disableLoadBalancing();
+*    return new Predis\Connection\Replication\SentinelReplication($strategy);
+*}];
+ */

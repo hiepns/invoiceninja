@@ -1,17 +1,19 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\TaxRate;
 
 use App\Http\Requests\Request;
+use Illuminate\Validation\Rule;
 
 class UpdateTaxRateRequest extends Request
 {
@@ -20,16 +22,28 @@ class UpdateTaxRateRequest extends Request
      *
      * @return bool
      */
-    public function authorize() : bool
+    public function authorize(): bool
     {
-        return auth()->user()->isAdmin();
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return $user->can('edit', $this->tax_rate);
     }
 
     public function rules()
     {
-        return [
-            'name' => 'unique:tax_rates,name,'.$this->tax_rate->name.',id,company_id,'.auth()->user()->companyId(),
-            'rate' => 'numeric',
-        ];
+
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $rules = [];
+
+        $rules['rate'] = 'sometimes|numeric';
+
+        if ($this->name) {
+            $rules['name'] = Rule::unique('tax_rates')->where('company_id', $user->company()->id)->ignore($this->tax_rate->id);
+        }
+
+        return $rules;
     }
 }

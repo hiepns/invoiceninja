@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Integration;
 
 use App\Models\CompanyLedger;
@@ -15,13 +17,13 @@ use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\MockAccountData;
 use Tests\TestCase;
 
-/** @test*/
+/** */
 class UpdateCompanyLedgerTest extends TestCase
 {
     use MockAccountData;
     use DatabaseTransactions;
 
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -29,7 +31,7 @@ class UpdateCompanyLedgerTest extends TestCase
     }
 
     /**
-     * @test
+     *
      */
     public function testPaymentIsPresentInLedger()
     {
@@ -45,7 +47,7 @@ class UpdateCompanyLedgerTest extends TestCase
     }
 
     /**
-     * @test
+     *
      */
     public function testInvoiceIsPresentInLedger()
     {

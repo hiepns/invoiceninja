@@ -1,16 +1,18 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Console\Commands;
 
+use App\Libraries\MultiDB;
 use App\Models\Design;
 use Illuminate\Console\Command;
 use stdClass;
@@ -48,12 +50,31 @@ class DesignUpdate extends Command
      */
     public function handle()
     {
-        foreach (Design::whereIsCustom(false)->get() as $design) {
-            $class = 'App\Services\PdfMaker\Designs\\'.$design->name;
-            $invoice_design = new $class();
-            $invoice_design->document();
+        //always return state to first DB
 
-            $design_object = new stdClass;
+        $current_db = config('database.default');
+
+        if (! config('ninja.db.multi_db_enabled')) {
+            $this->handleOnDb();
+        } else {
+            //multiDB environment, need to
+            foreach (MultiDB::$dbs as $db) {
+                MultiDB::setDB($db);
+
+                $this->handleOnDb();
+            }
+
+            MultiDB::setDB($current_db);
+        }
+    }
+
+    private function handleOnDb()
+    {
+        foreach (Design::where('is_custom', false)->get() as $design) {
+
+            $invoice_design = new \App\Services\Pdf\DesignExtractor($design->name);
+
+            $design_object = new stdClass();
             $design_object->includes = $invoice_design->getSectionHTML('style');
             $design_object->header = $invoice_design->getSectionHTML('header');
             $design_object->body = $invoice_design->getSectionHTML('body');

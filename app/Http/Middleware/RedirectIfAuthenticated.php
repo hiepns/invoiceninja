@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Middleware;
@@ -20,30 +21,34 @@ class RedirectIfAuthenticated
     /**
      * Handle an incoming request.
      *
-     * @param  Request  $request
+     * @param Request $request
      * @param Closure $next
-     * @param  string|null  $guard
+     * @param string|null $guard
      * @return mixed
      */
     public function handle($request, Closure $next, $guard = null)
     {
         switch ($guard) {
-        case 'contact':
-          if (Auth::guard($guard)->check()) {
-              return redirect()->route('client.dashboard');
-          }
-          break;
-          case 'user':
-          if (Auth::guard($guard)->check()) {
-              return redirect()->route('dashboard.index');
-          }
-          break;
-        default:
-          if (Auth::guard($guard)->check()) {
-              return redirect('/');
-          }
-          break;
-      }
+            case 'contact':
+
+                Auth::logout();
+
+                // if (Auth::guard($guard)->check()) {
+                //     return redirect()->route('client.dashboard');
+                // }
+                break;
+            case 'user':
+                Auth::logout();
+                break;
+            case 'vendor':
+                if (Auth::guard($guard)->check()) {
+                }
+                break;
+            default:
+                Auth::logout();
+
+                break;
+        }
 
         return $next($request);
     }

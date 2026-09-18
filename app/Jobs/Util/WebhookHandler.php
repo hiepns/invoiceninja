@@ -1,44 +1,39 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace App\Jobs\Util;
 
 use App\Libraries\MultiDB;
+use App\Models\Company;
 use App\Models\Webhook;
-use App\Transformers\ArraySerializer;
-use GuzzleHttp\Client;
-use GuzzleHttp\RequestOptions;
+use App\Utils\Ninja;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use League\Fractal\Manager;
-use League\Fractal\Resource\Item;
 
 class WebhookHandler implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
-    private $entity;
+    public $tries = 1; //number of retries
 
-    private $event_id;
-
-    private $company;
-
-    public $tries = 5; //number of retries
-
-    public $backoff = 5; //seconds to wait until retry
+    public $timeout = 60;
 
     public $deleteWhenMissingModels = true;
-
 
     /**
      * Create a new job instance.
@@ -46,77 +41,34 @@ class WebhookHandler implements ShouldQueue
      * @param $event_id
      * @param $entity
      */
-    public function __construct($event_id, $entity, $company)
-    {
-        $this->event_id = $event_id;
-        $this->entity = $entity;
-        $this->company = $company;
-    }
+    public function __construct(private int $event_id, private $entity, private Company $company, private string $includes = '') {}
 
     /**
      * Execute the job.
      *
-     * @return bool
      */
     public function handle()
-    {//todo set multidb here
-
+    {
         MultiDB::setDb($this->company->db);
 
-        if (! $this->company || $this->company->is_disabled) {
+        //If the company is disabled, or if on hosted, the user is not a paid hosted user return early
+        if (! $this->company || $this->company->is_disabled || (Ninja::isHosted() && !$this->company->account->isPaidHostedClient())) {
             return true;
         }
 
-
-        $subscriptions = Webhook::where('company_id', $this->company->id)
-                                    ->where('event_id', $this->event_id)
-                                    ->get();
-
-        if (! $subscriptions || $subscriptions->count() == 0) {
-            return;
-        }
-        
-        $subscriptions->each(function ($subscription) {
-            $this->process($subscription);
-        });
+        Webhook::query()
+                ->where('company_id', $this->company->id)
+                ->where('event_id', $this->event_id)
+                ->cursor()
+                ->each(function ($subscription) {
+                    WebhookSingle::dispatch($subscription->id, $this->entity, $this->company->db, $this->includes);
+                });
     }
 
-    private function process($subscription)
+    public function viaQueue()
     {
-        // generate JSON data
-        $manager = new Manager();
-        $manager->setSerializer(new ArraySerializer());
-
-        $class = sprintf('App\\Transformers\\%sTransformer', class_basename($this->entity));
-
-        $transformer = new $class();
-
-        $resource = new Item($this->entity, $transformer, $this->entity->getEntityType());
-        $data = $manager->createData($resource)->toArray();
-
-        $this->postData($subscription, $data, []);
+        return \App\Utils\Ninja::isHosted() ? 'webhooks' : 'default';
     }
 
-    private function postData($subscription, $data, $headers = [])
-    {
-        $base_headers = [
-            'Content-Length' => strlen(json_encode($data)),
-            'Accept'         => 'application/json',
-        ];
-
-        $client = new Client(['headers' => array_merge($base_headers, $headers)]);
-
-        $response = $client->post($subscription->target_url, [
-                        RequestOptions::JSON => $data, // or 'json' => [...]
-                    ]);
-
-        if ($response->getStatusCode() == 410 || $response->getStatusCode() == 200) {
-            $subscription->delete();
-        }
-    }
-
-    public function failed($exception)
-    {
-        info(print_r($exception->getMessage(), 1));
-    }
+    public function failed($exception = null) {}
 }

@@ -5,9 +5,9 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Factory;
@@ -16,7 +16,7 @@ use App\Models\Credit;
 
 class CloneCreditFactory
 {
-    public static function create(Credit $credit, $user_id) : ?Credit
+    public static function create(Credit $credit, $user_id): ?Credit
     {
         $clone_credit = $credit->replicate();
         $clone_credit->status_id = credit::STATUS_DRAFT;
@@ -25,9 +25,12 @@ class CloneCreditFactory
         $clone_credit->due_date = null;
         $clone_credit->partial_due_date = null;
         $clone_credit->user_id = $user_id;
-        $clone_credit->balance = $credit->amount;
+        //$clone_credit->balance = $credit->amount;
         $clone_credit->line_items = $credit->line_items;
 
+
+        $clone_credit->sync = null;
+        $clone_credit->backup = null; // @phpstan-ignore-line
         return $clone_credit;
     }
 }

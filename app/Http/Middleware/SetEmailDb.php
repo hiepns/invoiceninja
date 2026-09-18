@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Middleware;
@@ -29,18 +30,14 @@ class SetEmailDb
     {
         $error = [
             'message' => 'Email not set or not found',
-            'errors' => new stdClass,
+            'errors' => new stdClass(),
         ];
 
-        if ($request->input('email') && config('ninja.db.multi_db_enabled')) {
-            info("trying to find db");
+        if (config('ninja.db.multi_db_enabled') && $request->input('email') && is_string($request->input('email'))) {
             if (! MultiDB::userFindAndSetDb($request->input('email'))) {
                 return response()->json($error, 400);
             }
         }
-        // else {
-        //     return response()->json($error, 403);
-        // }
 
         return $next($request);
     }

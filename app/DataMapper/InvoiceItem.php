@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\DataMapper;
@@ -15,9 +16,13 @@ class InvoiceItem
 {
     public $quantity = 0;
 
+    public $net_cost = 0;
+
     public $cost = 0;
 
     public $product_key = '';
+
+    public $product_cost = 0;
 
     public $notes = '';
 
@@ -41,6 +46,10 @@ class InvoiceItem
 
     public $line_total = 0;
 
+    public $gross_line_total = 0;
+
+    public $tax_amount = 0;
+
     public $date = '';
 
     public $custom_value1 = '';
@@ -51,12 +60,30 @@ class InvoiceItem
 
     public $custom_value4 = '';
 
-    public $type_id = '1'; //1 = product, 2 = service, 3 unpaid gateway fee, 4 paid gateway fee, 5 late fee
+    public $type_id = '1'; //1 = product, 2 = service, 3 unpaid gateway fee, 4 paid gateway fee, 5 late fee, 6 expense
+
+    public $tax_id = '';
+
+    public $task_id = '';
+
+    public $expense_id = '';
+
+    public $unit_code = 'C62';
+
+    public $income_account_id = '';
+
+    public $tags = '';
 
     public static $casts = [
+        'tags' => 'string',
+        'net_cost' => 'float',
+        'task_id' => 'string',
+        'expense_id' => 'string',
+        'tax_id' => 'string',
         'type_id' => 'string',
         'quantity' => 'float',
         'cost' => 'float',
+        'product_cost' => 'float',
         'product_key' => 'string',
         'notes' => 'string',
         'discount' => 'float',
@@ -69,10 +96,74 @@ class InvoiceItem
         'tax_rate3' => 'float',
         'sort_id' => 'string',
         'line_total' => 'float',
+        'gross_line_total' => 'float',
+        'tax_amount' => 'float',
         'date' => 'string',
         'custom_value1' => 'string',
         'custom_value2' => 'string',
         'custom_value3' => 'string',
         'custom_value4' => 'string',
+        'unit_code' => 'string',
+        'income_account_id' => 'string',
     ];
+
+    public static function normalizeTags(mixed $tags): string
+    {
+        if (! is_string($tags)) {
+            return '';
+        }
+
+        return self::tagsFromNames(explode(',', $tags));
+    }
+
+    public static function serializeTags(mixed $tags): string
+    {
+        if (is_string($tags)) {
+            return self::normalizeTags($tags);
+        }
+
+        return is_iterable($tags) ? self::tagsFromNames($tags) : '';
+    }
+
+    public static function tagsFromNames(iterable $tags): string
+    {
+        $names = [];
+
+        foreach ($tags as $tag) {
+            $name = match (true) {
+                is_array($tag) => $tag['name'] ?? '',
+                is_object($tag) => $tag->name ?? '',
+                is_string($tag) => $tag,
+                default => '',
+            };
+
+            if (! is_string($name)) {
+                continue;
+            }
+
+            $name = trim(str_replace(',', ' ', $name));
+            $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
+
+            if ($name !== '' && ! in_array($name, $names, true)) {
+                $names[] = $name;
+            }
+        }
+
+        return implode(',', $names);
+    }
+
+    public static function formatTagsForDisplay(mixed $tags): string
+    {
+        return str_replace(',', ' · ', self::normalizeTags($tags));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function tagNames(mixed $tags): array
+    {
+        $normalized = self::normalizeTags($tags);
+
+        return $normalized === '' ? [] : explode(',', $normalized);
+    }
 }

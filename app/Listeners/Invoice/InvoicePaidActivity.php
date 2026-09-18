@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Listeners\Invoice;
@@ -20,6 +21,8 @@ use stdClass;
 class InvoicePaidActivity implements ShouldQueue
 {
     protected $activity_repo;
+
+    public $delay = 10;
 
     /**
      * Create the event listener.
@@ -41,19 +44,22 @@ class InvoicePaidActivity implements ShouldQueue
     {
         MultiDB::setDb($event->company->db);
 
-        $fields = new stdClass;
+        $fields = new stdClass();
 
+        $user_id = $event->event_vars['user_id'] ?? $event->invoice->user_id;
+
+        $fields->user_id = $user_id;
         $fields->invoice_id = $event->invoice->id;
-        $fields->user_id = $event->invoice->user_id;
+        $fields->client_id = $event->payment->client_id;
+        $fields->client_contact_id = $event->payment->client_contact_id ?? null;
         $fields->company_id = $event->invoice->company_id;
         $fields->activity_type_id = Activity::PAID_INVOICE;
+        $fields->payment_id = $event->payment->id;
 
         $this->activity_repo->save($fields, $event->invoice, $event->event_vars);
 
-        try {
-            $event->invoice->service()->touchPdf();
-        } catch (\Exception $e) {
-            info(print_r($e->getMessage(), 1));
+        if ($event->invoice->subscription()->exists()) {
+            $event->invoice->subscription->service()->planPaid($event->invoice);
         }
     }
 }

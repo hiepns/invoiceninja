@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Unit;
 
 use App\Utils\Ninja;
@@ -16,15 +18,14 @@ use Tests\MockAccountData;
 use Tests\TestCase;
 
 /**
- * @test
- * @covers App\Listeners\Payment\PaymentNotification
+ *
+ *  App\Listeners\Payment\PaymentNotification
  */
 class GoogleAnalyticsTest extends TestCase
 {
     use MockAccountData;
     use DatabaseTransactions;
-
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -33,13 +34,12 @@ class GoogleAnalyticsTest extends TestCase
 
     public function testGoogleAnalyticsLogic()
     {
-        $this->withoutEvents();
 
         $analytics_id = 'analytics_id';
         $invoice = $this->invoice;
         $client = $this->client;
 
-        $invoice->service()->markPaid()->save();
+        $invoice = $invoice->service()->markPaid()->save();
 
         $payment = $invoice->payments->first();
 

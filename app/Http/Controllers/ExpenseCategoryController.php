@@ -1,28 +1,31 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
 
 use App\Factory\ExpenseCategoryFactory;
+use App\Filters\ExpenseCategoryFilters;
+use App\Http\Requests\ExpenseCategory\BulkExpenseCategoryRequest;
 use App\Http\Requests\ExpenseCategory\CreateExpenseCategoryRequest;
 use App\Http\Requests\ExpenseCategory\DestroyExpenseCategoryRequest;
 use App\Http\Requests\ExpenseCategory\EditExpenseCategoryRequest;
 use App\Http\Requests\ExpenseCategory\ShowExpenseCategoryRequest;
 use App\Http\Requests\ExpenseCategory\StoreExpenseCategoryRequest;
 use App\Http\Requests\ExpenseCategory\UpdateExpenseCategoryRequest;
+use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Repositories\BaseRepository;
 use App\Transformers\ExpenseCategoryTransformer;
 use App\Utils\Traits\MakesHash;
-use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
@@ -77,20 +80,22 @@ class ExpenseCategoryController extends BaseController
      *
      * Display a listing of the resource.
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      */
-    public function index()
+    public function index(ExpenseCategoryFilters $filters)
     {
-        $expense_categories = ExpenseCategory::scope();
+        $expense_categories = ExpenseCategory::filter($filters);
 
         return $this->listResponse($expense_categories);
     }
+
+
 
     /**
      * Show the form for creating a new resource.
      *
      * @param CreateExpenseCategoryRequest $request
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      *
@@ -100,8 +105,7 @@ class ExpenseCategoryController extends BaseController
      *      tags={"expense_categories"},
      *      summary="Gets a new blank Expens Category object",
      *      description="Returns a blank object with default values",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Response(
      *          response=200,
@@ -126,20 +130,59 @@ class ExpenseCategoryController extends BaseController
      */
     public function create(CreateExpenseCategoryRequest $request)
     {
-        $expense_category = ExpenseCategoryFactory::create(auth()->user()->company()->id, auth()->user()->id);
+
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $expense_category = ExpenseCategoryFactory::create($user->company()->id, auth()->user()->id);
 
         return $this->itemResponse($expense_category);
     }
+
 
     /**
      * Store a newly created resource in storage.
      *
      * @param StoreExpenseCategoryRequest $request
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
+     *
+     *
+     * @OA\Post(
+     *      path="/api/v1/expense_categories",
+     *      operationId="storeExpenseCategory",
+     *      tags={"expense_categories"},
+     *      summary="Adds a expense category",
+     *      description="Adds an expense category to the system",
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
+     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
+     *      @OA\Parameter(ref="#/components/parameters/include"),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Returns the saved invoice object",
+     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
+     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
+     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
+     *          @OA\JsonContent(ref="#/components/schemas/ExpenseCategory"),
+     *       ),
+     *       @OA\Response(
+     *          response=422,
+     *          description="Validation error",
+     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
+     *
+     *       ),
+     *       @OA\Response(
+     *           response="default",
+     *           description="Unexpected Error",
+     *           @OA\JsonContent(ref="#/components/schemas/Error"),
+     *       ),
+     *     )
      */
     public function store(StoreExpenseCategoryRequest $request)
     {
-        $expense_category = ExpenseCategoryFactory::create(auth()->user()->company()->id, auth()->user()->id);
+        /** @var \App\Models\User $user **/
+        $user = auth()->user();
+
+        $expense_category = ExpenseCategoryFactory::create($user->company()->id, $user->id);
         $expense_category->fill($request->all());
         $expense_category->save();
 
@@ -151,7 +194,7 @@ class ExpenseCategoryController extends BaseController
      *
      * @param ShowExpenseCategoryRequest $request
      * @param ExpenseCategory $expense_category
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -160,8 +203,7 @@ class ExpenseCategoryController extends BaseController
      *      tags={"expense_categories"},
      *      summary="Shows a Expens Category",
      *      description="Displays an ExpenseCategory by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(
      *          name="id",
@@ -205,7 +247,7 @@ class ExpenseCategoryController extends BaseController
      *
      * @param EditExpenseCategoryRequest $request
      * @param ExpenseCategory $expense_category
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -214,8 +256,7 @@ class ExpenseCategoryController extends BaseController
      *      tags={"expense_categories"},
      *      summary="Shows a Expens Category for editting",
      *      description="Displays a Expens Category by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(
      *          name="id",
@@ -259,7 +300,7 @@ class ExpenseCategoryController extends BaseController
      *
      * @param UpdateExpenseCategoryRequest $request
      * @param ExpenseCategory $expense_category
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      *
@@ -269,8 +310,7 @@ class ExpenseCategoryController extends BaseController
      *      tags={"expense_categories"},
      *      summary="Updates a tax rate",
      *      description="Handles the updating of a tax rate by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(
      *          name="id",
@@ -317,7 +357,7 @@ class ExpenseCategoryController extends BaseController
      *
      * @param DestroyExpenseCategoryRequest $request
      * @param ExpenseCategory $expense_category
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @throws \Exception
@@ -327,8 +367,7 @@ class ExpenseCategoryController extends BaseController
      *      tags={"expense_categories"},
      *      summary="Deletes a ExpenseCategory",
      *      description="Handles the deletion of an ExpenseCategory by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(
      *          name="id",
@@ -373,7 +412,7 @@ class ExpenseCategoryController extends BaseController
     /**
      * Perform bulk actions on the list view.
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Post(
@@ -382,8 +421,7 @@ class ExpenseCategoryController extends BaseController
      *      tags={"expense_categories"},
      *      summary="Performs bulk actions on an array of ExpenseCategorys",
      *      description="",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/index"),
      *      @OA\RequestBody(
@@ -421,20 +459,23 @@ class ExpenseCategoryController extends BaseController
      *       ),
      *     )
      */
-    public function bulk()
+    public function bulk(BulkExpenseCategoryRequest $request)
     {
-        $action = request()->input('action');
+        /** @var \App\Models\User $user **/
+        $user = auth()->user();
 
-        $ids = request()->input('ids');
+        $action = $request->input('action');
 
-        $expense_categories = ExpenseCategory::withTrashed()->find($this->transformKeys($ids));
+        $ids = $request->input('ids');
 
-        $expense_categories->each(function ($expense_category, $key) use ($action) {
-            if (auth()->user()->can('edit', $expense_category)) {
+        $expense_categories = ExpenseCategory::withTrashed()->company()->find($ids);
+
+        $expense_categories->each(function ($expense_category, $key) use ($action, $user) {
+            if ($user->can('edit', $expense_category)) {
                 $this->base_repo->{$action}($expense_category);
             }
         });
 
-        return $this->listResponse(ExpenseCategory::withTrashed()->whereIn('id', $this->transformKeys($ids)));
+        return $this->listResponse(ExpenseCategory::withTrashed()->company()->whereIn('id', $ids));
     }
 }

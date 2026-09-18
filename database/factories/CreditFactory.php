@@ -4,10 +4,11 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Database\Factories;
 
 use App\Factory\InvoiceItemFactory;
@@ -16,13 +17,6 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 
 class CreditFactory extends Factory
 {
-    /**
-     * The name of the factory's corresponding model.
-     *
-     * @var string
-     */
-    protected $model = Credit::class;
-
     /**
      * Define the model's default state.
      *
@@ -34,6 +28,7 @@ class CreditFactory extends Factory
             'status_id' => Credit::STATUS_DRAFT,
             'discount' => $this->faker->numberBetween(1, 10),
             'is_amount_discount' => (bool) random_int(0, 1),
+            'number' => \Illuminate\Support\Str::random(54),
             'tax_name1' => 'GST',
             'tax_rate1' => 10,
             'tax_name2' => 'VAT',

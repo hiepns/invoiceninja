@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
@@ -15,33 +16,56 @@ use App\Events\Client\ClientWasCreated;
 use App\Events\Client\ClientWasUpdated;
 use App\Factory\ClientFactory;
 use App\Filters\ClientFilters;
+use App\Http\Requests\Client\BulkClientRequest;
+use App\Http\Requests\Client\ClientDocumentsRequest;
 use App\Http\Requests\Client\CreateClientRequest;
 use App\Http\Requests\Client\DestroyClientRequest;
 use App\Http\Requests\Client\EditClientRequest;
+use App\Http\Requests\Client\MergeClientRequest;
+use App\Http\Requests\Client\PurgeClientRequest;
+use App\Http\Requests\Client\ReactivateClientEmailRequest;
 use App\Http\Requests\Client\ShowClientRequest;
 use App\Http\Requests\Client\StoreClientRequest;
 use App\Http\Requests\Client\UpdateClientRequest;
-use App\Jobs\Client\StoreClient;
-use App\Jobs\Client\UpdateClient;
+use App\Http\Requests\Client\UploadClientRequest;
+use App\Jobs\Client\UpdateTaxData;
+use App\Jobs\PostMark\ProcessPostmarkWebhook;
+use App\Models\Account;
 use App\Models\Client;
+use App\Models\Company;
+use App\Models\Credit;
+use App\Models\Document;
+use App\Models\Expense;
+use App\Models\Invoice;
+use App\Models\Payment;
+use App\Models\Project;
+use App\Models\Quote;
+use App\Models\RecurringExpense;
+use App\Models\RecurringInvoice;
+use App\Models\SystemLog;
+use App\Models\Task;
 use App\Repositories\ClientRepository;
+use App\Services\Template\TemplateAction;
 use App\Transformers\ClientTransformer;
+use App\Transformers\DocumentTransformer;
 use App\Utils\Ninja;
 use App\Utils\Traits\BulkOptions;
 use App\Utils\Traits\MakesHash;
+use App\Utils\Traits\SavesDocuments;
 use App\Utils\Traits\Uploadable;
-use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
+use Postmark\PostmarkClient;
 
 /**
  * Class ClientController.
- * @covers App\Http\Controllers\ClientController
  */
 class ClientController extends BaseController
 {
     use MakesHash;
     use Uploadable;
     use BulkOptions;
+    use SavesDocuments;
 
     protected $entity_type = Client::class;
 
@@ -64,44 +88,16 @@ class ClientController extends BaseController
     }
 
     /**
-     * @OA\Get(
-     *      path="/api/v1/clients",
-     *      operationId="getClients",
-     *      tags={"clients"},
-     *      summary="Gets a list of clients",
-     *      description="Lists clients, search and filters allow fine grained lists to be generated.
-
-    Query parameters can be added to performed more fine grained filtering of the clients, these are handled by the ClientFilters class which defines the methods available",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(ref="#/components/parameters/include"),
-     *      @OA\Parameter(ref="#/components/parameters/index"),
-     *      @OA\Response(
-     *          response=200,
-     *          description="A list of clients",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *          @OA\JsonContent(ref="#/components/schemas/Client"),
-     *       ),
-     *       @OA\Response(
-     *          response=422,
-     *          description="Validation error",
-     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
+     *
      * @param ClientFilters $filters
-     * @return Response|mixed
+     * @return Response| \Illuminate\Http\JsonResponse
+     *
      */
     public function index(ClientFilters $filters)
     {
-        $clients = Client::filter($filters);
+        set_time_limit(45);
+
+        $clients = Client::filter($filters)->with('tags');
 
         return $this->listResponse($clients);
     }
@@ -111,53 +107,18 @@ class ClientController extends BaseController
      *
      * @param ShowClientRequest $request
      * @param Client $client
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
-     *
-     * @OA\Get(
-     *      path="/api/v1/clients/{id}",
-     *      operationId="showClient",
-     *      tags={"clients"},
-     *      summary="Shows a client",
-     *      description="Displays a client by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(ref="#/components/parameters/include"),
-     *      @OA\Parameter(
-     *          name="id",
-     *          in="path",
-     *          description="The Client Hashed ID",
-     *          example="D2J234DFA",
-     *          required=true,
-     *          @OA\Schema(
-     *              type="string",
-     *              format="string",
-     *          ),
-     *      ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="Returns the cl.ient object",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *          @OA\JsonContent(ref="#/components/schemas/Client"),
-     *       ),
-     *       @OA\Response(
-     *          response=422,
-     *          description="Validation error",
-     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-     *
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
      */
     public function show(ShowClientRequest $request, Client $client)
     {
+
+        if (auth()->user()->hasExcludedPermissions($this->client_excludable_permissions, $this->client_excludable_overrides)) {
+            foreach ($this->client_exclusion_fields as $field) {
+                $client->{$field} = null;
+            }
+        }
+
         return $this->itemResponse($client);
     }
 
@@ -166,53 +127,19 @@ class ClientController extends BaseController
      *
      * @param EditClientRequest $request
      * @param Client $client
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
-     *
-     * @OA\Get(
-     *      path="/api/v1/clients/{id}/edit",
-     *      operationId="editClient",
-     *      tags={"clients"},
-     *      summary="Shows a client for editting",
-     *      description="Displays a client by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(ref="#/components/parameters/include"),
-     *      @OA\Parameter(
-     *          name="id",
-     *          in="path",
-     *          description="The Client Hashed ID",
-     *          example="D2J234DFA",
-     *          required=true,
-     *          @OA\Schema(
-     *              type="string",
-     *              format="string",
-     *          ),
-     *      ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="Returns the client object",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *          @OA\JsonContent(ref="#/components/schemas/Client"),
-     *       ),
-     *       @OA\Response(
-     *          response=422,
-     *          description="Validation error",
-     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-     *
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
      */
     public function edit(EditClientRequest $request, Client $client)
     {
+
+        if (auth()->user()->hasExcludedPermissions($this->client_excludable_permissions, $this->client_excludable_overrides)) {
+            foreach ($this->client_exclusion_fields as $field) {
+                $client->{$field} = null;
+            }
+        }
+
+
         return $this->itemResponse($client);
     }
 
@@ -221,51 +148,8 @@ class ClientController extends BaseController
      *
      * @param UpdateClientRequest $request
      * @param Client $client
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
-     *
-     *
-     * @OA\Put(
-     *      path="/api/v1/clients/{id}",
-     *      operationId="updateClient",
-     *      tags={"clients"},
-     *      summary="Updates a client",
-     *      description="Handles the updating of a client by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(ref="#/components/parameters/include"),
-     *      @OA\Parameter(
-     *          name="id",
-     *          in="path",
-     *          description="The Client Hashed ID",
-     *          example="D2J234DFA",
-     *          required=true,
-     *          @OA\Schema(
-     *              type="string",
-     *              format="string",
-     *          ),
-     *      ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="Returns the client object",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *          @OA\JsonContent(ref="#/components/schemas/Client"),
-     *       ),
-     *       @OA\Response(
-     *          response=422,
-     *          description="Validation error",
-     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-     *
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
      */
     public function update(UpdateClientRequest $request, Client $client)
     {
@@ -273,11 +157,14 @@ class ClientController extends BaseController
             return $request->disallowUpdate();
         }
 
+        /** @var ?\App\Models\User $user */
+        $user = auth()->user();
+
         $client = $this->client_repo->save($request->all(), $client);
 
         $this->uploadLogo($request->file('company_logo'), $client->company, $client);
 
-        event(new ClientWasUpdated($client, $client->company, Ninja::eventVars()));
+        event(new ClientWasUpdated($client, $client->company, Ninja::eventVars($user ? $user->id : null)));
 
         return $this->itemResponse($client->fresh());
     }
@@ -286,44 +173,15 @@ class ClientController extends BaseController
      * Show the form for creating a new resource.
      *
      * @param CreateClientRequest $request
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
-     *
-     *
-     * @OA\Get(
-     *      path="/api/v1/clients/create",
-     *      operationId="getClientsCreate",
-     *      tags={"clients"},
-     *      summary="Gets a new blank client object",
-     *      description="Returns a blank object with default values",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(ref="#/components/parameters/include"),
-     *      @OA\Response(
-     *          response=200,
-     *          description="A blank client object",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *          @OA\JsonContent(ref="#/components/schemas/Client"),
-     *       ),
-     *       @OA\Response(
-     *          response=422,
-     *          description="Validation error",
-     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-     *
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
      */
     public function create(CreateClientRequest $request)
     {
-        $client = ClientFactory::create(auth()->user()->company()->id, auth()->user()->id);
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $client = ClientFactory::create($user->company()->id, $user->id);
 
         return $this->itemResponse($client);
     }
@@ -332,50 +190,26 @@ class ClientController extends BaseController
      * Store a newly created resource in storage.
      *
      * @param StoreClientRequest $request
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
-     *
-     *
-     * @OA\Post(
-     *      path="/api/v1/clients",
-     *      operationId="storeClient",
-     *      tags={"clients"},
-     *      summary="Adds a client",
-     *      description="Adds an client to a company",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(ref="#/components/parameters/include"),
-     *      @OA\Response(
-     *          response=200,
-     *          description="Returns the saved client object",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *          @OA\JsonContent(ref="#/components/schemas/Client"),
-     *       ),
-     *       @OA\Response(
-     *          response=422,
-     *          description="Validation error",
-     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-     *
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
      */
     public function store(StoreClientRequest $request)
     {
-        $client = $this->client_repo->save($request->all(), ClientFactory::create(auth()->user()->company()->id, auth()->user()->id));
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $client = $this->client_repo->save($request->all(), ClientFactory::create($user->company()->id, $user->id));
 
         $client->load('contacts', 'primary_contact');
 
+        /* Set the client country to the company if none is set */
+        if (! $client->country_id && strlen($client->company->settings->country_id) > 1) {
+            $client->update(['country_id' => $client->company->settings->country_id]);
+        }
+
         $this->uploadLogo($request->file('company_logo'), $client->company, $client);
 
-        event(new ClientWasCreated($client, $client->company, Ninja::eventVars()));
+        event(new ClientWasCreated($client, $client->company, Ninja::eventVars(auth()->user() ? $user->id : null)));
 
         return $this->itemResponse($client);
     }
@@ -385,133 +219,298 @@ class ClientController extends BaseController
      *
      * @param DestroyClientRequest $request
      * @param Client $client
-     * @return Response
-     *
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      * @throws \Exception
-     * @OA\Delete(
-     *      path="/api/v1/clients/{id}",
-     *      operationId="deleteClient",
-     *      tags={"clients"},
-     *      summary="Deletes a client",
-     *      description="Handles the deletion of a client by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(ref="#/components/parameters/include"),
-     *      @OA\Parameter(
-     *          name="id",
-     *          in="path",
-     *          description="The Client Hashed ID",
-     *          example="D2J234DFA",
-     *          required=true,
-     *          @OA\Schema(
-     *              type="string",
-     *              format="string",
-     *          ),
-     *      ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="Returns a HTTP status",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *       ),
-     *       @OA\Response(
-     *          response=422,
-     *          description="Validation error",
-     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-     *
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
      */
     public function destroy(DestroyClientRequest $request, Client $client)
     {
-        //may not need these destroy routes as we are using actions to 'archive/delete'
-        $client->delete();
+        $this->client_repo->delete($client);
 
-        return response()->json([], 200);
+        return $this->itemResponse($client->fresh());
     }
 
     /**
      * Perform bulk actions on the list view.
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
-     *
-     * @OA\Post(
-     *      path="/api/v1/clients/bulk",
-     *      operationId="bulkClients",
-     *      tags={"clients"},
-     *      summary="Performs bulk actions on an array of clients",
-     *      description="",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(ref="#/components/parameters/index"),
-     *      @OA\RequestBody(
-     *         description="User credentials",
-     *         required=true,
-     *         @OA\MediaType(
-     *             mediaType="application/json",
-     *             @OA\Schema(
-     *                 type="array",
-     *                 @OA\Items(
-     *                     type="integer",
-     *                     description="Array of hashed IDs to be bulk 'actioned",
-     *                     example="[0,1,2,3]",
-     *                 ),
-     *             )
-     *         )
-     *     ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="The Client User response",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *          @OA\JsonContent(ref="#/components/schemas/Client"),
-     *       ),
-     *       @OA\Response(
-     *          response=422,
-     *          description="Validation error",
-     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
      */
-    public function bulk()
+    public function bulk(BulkClientRequest $request)
     {
-        $action = request()->input('action');
+        $action = $request->action;
 
-        $ids = request()->input('ids');
-        $clients = Client::withTrashed()->find($this->transformKeys($ids));
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        $clients->each(function ($client, $key) use ($action) {
-            if (auth()->user()->can('edit', $client)) {
+        $clients = Client::withTrashed()
+                         ->company()
+                         ->whereIn('id', $request->ids)
+                         ->get();
+
+        if ($action == 'template' && $user->can('view', $clients->first())) {
+
+            $hash_or_response = $request->boolean('send_email') ? 'email sent' : \Illuminate\Support\Str::uuid();
+
+            TemplateAction::dispatch(
+                $clients->pluck('hashed_id')->toArray(),
+                $request->template_id,
+                Client::class,
+                $user->id,
+                $user->company(),
+                $user->company()->db,
+                $hash_or_response,
+                $request->boolean('send_email')
+            );
+
+            return response()->json(['message' => $hash_or_response], 200);
+        }
+
+        if ($action == 'assign_group' && $user->can('edit', $clients->first())) {
+
+            $this->client_repo->assignGroup($clients, $request->group_settings_id);
+
+            return $this->listResponse(Client::query()->withTrashed()->company()->whereIn('id', $request->ids));
+
+        }
+
+        if ($action == 'bulk_update' && $user->can('edit', $clients->first())) {
+
+            $clients = Client::withTrashed()
+                    ->company()
+                    ->whereIn('id', $request->ids);
+
+            $this->client_repo->bulkUpdate($clients, $request->column, $request->new_value);
+
+            return $this->listResponse(Client::query()->withTrashed()->company()->whereIn('id', $request->ids));
+
+        }
+
+        $clients->each(function ($client) use ($action, $user) {
+            if ($user->can('edit', $client)) {
                 $this->client_repo->{$action}($client);
             }
         });
 
-        return $this->listResponse(Client::withTrashed()->whereIn('id', $this->transformKeys($ids)));
+        return $this->listResponse(Client::query()->withTrashed()->company()->whereIn('id', $request->ids));
     }
 
     /**
-     * Returns a client statement.
+     * Update the specified resource in storage.
      *
-     * @return void [type] [description]
+     * @param UploadClientRequest $request
+     * @param Client $client
+     * @return Response| \Illuminate\Http\JsonResponse
+     *
      */
-    public function statement()
+    public function upload(UploadClientRequest $request, Client $client)
     {
-        //todo
+        if (! $this->checkFeature(Account::FEATURE_DOCUMENTS)) {
+            return $this->featureFailure();
+        }
+
+        if ($request->has('documents')) {
+            $this->saveDocuments($request->file('documents'), $client, $request->has('is_public') ? $request->boolean('is_public') : null);
+        }
+
+        return $this->itemResponse($client->fresh());
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param PurgeClientRequest $request
+     * @param Client $client
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
+     *
+     */
+    public function purge(PurgeClientRequest $request, Client $client)
+    {
+        //delete all documents
+        $client->documents->each(function ($document) {
+            try {
+                Storage::disk($document->disk)->delete($document->url);
+            } catch (\Exception $e) {
+                nlog($e->getMessage());
+            }
+        });
+
+        //force delete the client
+        $this->client_repo->purge($client);
+
+        return response()->json(['message' => 'Success'], 200);
+
+        //todo add an event here using the client name as reference for purge event
+    }
+
+    /**
+         * Update the specified resource in storage.
+         *
+         * @param MergeClientRequest $request
+         * @param Client $client
+         * @param string $mergeable_client
+         * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
+         *
+         */
+
+    public function merge(MergeClientRequest $request, Client $client, string $mergeable_client)
+    {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $m_client = Client::withTrashed()
+                            ->where('id', $this->decodePrimaryKey($mergeable_client))
+                            ->where('company_id', $user->company()->id)
+                            ->first();
+
+        if (!$m_client) {
+            return response()->json(['message' => "Client not found"], 400);
+        }
+
+        if ($m_client->id == $client->id) {
+            return response()->json(['message' => "Attempting to merge the same client is not possible."], 400);
+        }
+
+        $merged_client = $client->service()->merge($m_client)->save();
+
+        return $this->itemResponse($merged_client);
+    }
+
+    /**
+     * Updates the client's tax data
+     *
+     * @param  MergeClientRequest $request
+     * @param  Client $client
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
+     */
+    public function updateTaxData(MergeClientRequest $request, Client $client)
+    {
+        if ($client->company->account->isPaid()) {
+            (new UpdateTaxData($client, $client->company))->handle();
+        }
+
+        return $this->itemResponse($client->fresh());
+    }
+
+    /**
+     * Reactivate a client email
+     *
+     * @param  ReactivateClientEmailRequest $request
+     * @param  string $bounce_id //could also be the invitationId
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
+     */
+    public function reactivateEmail(ReactivateClientEmailRequest $request, string $bounce_id)
+    {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        if (stripos($bounce_id, '-') !== false) {
+            $log
+                = SystemLog::query()
+                ->where('company_id', $user->company()->id)
+                ->where('type_id', SystemLog::TYPE_WEBHOOK_RESPONSE)
+                ->where('category_id', SystemLog::CATEGORY_MAIL)
+                ->whereJsonContains('log', ['MessageID' => $bounce_id])
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if (!$log) 
+                return response()->json(['message' => 'Bounce ID not found'], 400);
+
+            $resolved_bounce_id = false;
+
+            if (($log?->log['ID'] ?? false)) {
+                $resolved_bounce_id = $log->log['ID'] ?? false;
+            }
+
+            if (!$resolved_bounce_id) {
+                $ppwebhook = new ProcessPostmarkWebhook([], config('services.postmark.token'));
+                $resolved_bounce_id = $ppwebhook->getBounceId($bounce_id);
+            }
+
+            if (!$resolved_bounce_id) {
+                return response()->json(['message' => 'Bounce ID not found'], 400);
+            }
+
+            $bounce_id = $resolved_bounce_id;
+
+            $record = $log->log;
+            $record['ID'] = '';
+
+            //2025-01-15 15:00:00 - unset the bounce ID here.
+            $events = $record['history']['events'];
+
+            foreach ($events as &$event) {
+                $event['bounce_id'] = "";
+            }
+            unset($event);
+
+            $record['history']['events'] = $events;
+
+            $log->log = $record;
+            $log->save();
+
+        }
+
+        $postmark = new PostmarkClient(config('services.postmark.token'));
+
+        try {
+
+            /** @var ?\Postmark\Models\DynamicResponseModel $response */
+            $response = $postmark->activateBounce((int) $bounce_id);
+
+            // if ($response && $response?->Message == 'OK' && !$response->Bounce->Inactive && $response->Bounce->Email) { // @phpstan-ignore-line
+
+            //     $email =  $response->Bounce->Email;
+            // }
+
+            return response()->json(['message' => 'Success'], 200);
+
+        } catch (\Exception $e) {
+
+            return response()->json(['message' => $e->getMessage(), 400]);
+
+        }
+
+    }
+
+    public function documents(ClientDocumentsRequest $request, Client $client)
+    {
+
+        $this->entity_type = Document::class;
+
+        $this->entity_transformer = DocumentTransformer::class;
+
+        $documents = Document::query()
+            ->company()
+            ->whereHasMorph('documentable', [Invoice::class, Quote::class, Credit::class, Expense::class, Payment::class, Task::class, RecurringInvoice::class, RecurringExpense::class, Project::class], function ($query) use ($client) {
+                $query->where('client_id', $client->id);
+            })
+            ->orWhereHasMorph('documentable', [Client::class], function ($query) use ($client) {
+                $query->where('id', $client->id);
+            })
+            ->when(strlen($request->input('filter') ?? '') > 1, function ($query) use ($request) {
+                $query->where('name', 'like', '%' . $request->input('filter', '') . '%');
+            })
+            ->when(strlen($request->input('sort') ?? '') > 1, function ($query) use ($request) {
+
+                $sort_col = explode('|', $request->input('sort'));
+
+                if (!is_array($sort_col) || count($sort_col) != 2 || !in_array($sort_col[0], \Illuminate\Support\Facades\Schema::getColumnListing($query->getModel()->getTable()))) {
+                    return $query;
+                }
+
+                $dir = ($sort_col[1] == 'asc') ? 'asc' : 'desc';
+                return $query->orderBy($sort_col[0], $dir);
+
+            });
+
+        return $this->listResponse($documents);
+
+    }
+
+    public function showSettings(ShowClientRequest $request, Client $client)
+    {
+        return response()->json($client->service()->showSettingsMap(), 200);
     }
 }

@@ -1,112 +1,175 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Feature;
 
+use App\Models\Client;
+use App\Models\CompanyGateway;
+use App\Models\Invoice;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
-use Illuminate\Support\Facades\URL;
 use Tests\MockAccountData;
 use Tests\TestCase;
 
-/**
- * @test
- * @covers  App\Models\Client
- */
 class ClientModelTest extends TestCase
 {
     use MockAccountData;
     use DatabaseTransactions;
-
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
         $this->makeTestData();
 
         if (config('ninja.testvars.travis') !== false) {
-            $this->markTestSkipped('Skip test for Travis');
+            $this->markTestSkipped('Skip test for GH Actions');
         }
 
         if (! config('ninja.testvars.stripe')) {
             $this->markTestSkipped('Skip test no company gateways installed');
         }
+
+        if (CompanyGateway::count() == 0) {
+            $this->markTestSkipped('Skip test no company gateways installed');
+        }
+
     }
 
-    public function testPaymentMethods()
+    public function testNewWithoutAndDeletedClientFilters()
     {
-        $amount = 40;
 
-        $company_gateways = $this->client->getSetting('company_gateway_ids');
+        $this->invoice->amount = 10;
+        $this->invoice->balance = 10;
+        $this->invoice->status_id = 2;
+        $this->invoice->date = now()->subDays(2);
+        $this->invoice->due_date = now()->addDays(2);
+        $this->invoice->save();
 
-        //todo create a test where we actually SET a value in the settings->company_gateways object and test if we can harvest.
+        $cd = Client::factory()->create([
+            'company_id' => $this->company->id,
+            'user_id' => $this->user->id,
+        ]);
 
-        if ($company_gateways) {
-            $gateways = $this->company->company_gateways->whereIn('id', $payment_gateways);
-        } else {
-            $gateways = $this->company->company_gateways;
-        }
 
-        $this->assertNotNull($gateways);
+        $cd2 = Client::factory()->create([
+            'company_id' => $this->company->id,
+            'user_id' => $this->user->id,
+        ]);
 
-        $pre_count = $gateways->count();
+        $invoice_count = Invoice::where('company_id', $this->company->id)->count();
 
-        $gateways->filter(function ($method) use ($amount) {
-            if ($method->min_limit !== null && $amount < $method->min_limit) {
-                return false;
-            }
+        $this->assertGreaterThan(0, $invoice_count);
 
-            if ($method->max_limit !== null && $amount > $method->min_limit) {
-                return false;
-            }
-        });
+        $i = Invoice::factory()->create([
+            'client_id' => $cd->id,
+            'user_id' => $this->user->id,
+            'company_id' => $this->company->id,
+            'status_id' => 2,
+            'amount' => 10,
+            'balance' => 10,
+            'date' => now()->subDays(2)->format('Y-m-d'),
+            'due_date' => now()->addDays(5)->format('Y-m-d'),
+            'partial' => 0,
+            'partial_due_date' => null,
+        ]);
 
-        $post_count = $gateways->count();
 
-        $this->assertEquals($pre_count, $post_count);
+        $i2 = Invoice::factory()->create([
+            'client_id' => $cd2->id,
+            'user_id' => $this->user->id,
+            'company_id' => $this->company->id,
+            'status_id' => 2,
+            'amount' => 10,
+            'balance' => 10,
+            'date' => now()->subDays(2)->format('Y-m-d'),
+            'due_date' => now()->addDays(5)->format('Y-m-d'),
+            'partial' => 0,
+            'partial_due_date' => null,
+        ]);
 
-        $payment_methods = [];
+        $response = $this->withHeaders([
+        'X-API-SECRET' => config('ninja.api_secret'),
+        'X-API-TOKEN' => $this->token,
+        ])->get('/api/v1/invoices?status=active');
 
-        foreach ($gateways as $gateway) {
-            foreach ($gateway->driver($this->client)->gatewayTypes() as $type) {
-                $payment_methods[] = [$gateway->id => $type];
-            }
-        }
+        $response->assertStatus(200);
+        $arr = $response->json();
 
-        $this->assertEquals(8, count($payment_methods));
+        $this->assertEquals($invoice_count + 2, count($arr['data']));
 
-        $payment_methods_collections = collect($payment_methods);
+        $response = $this->withHeaders([
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->get('/api/v1/invoices?upcoming=true&status=active&include=client');
 
-        //** Plucks the remaining keys into its own collection
-        $payment_methods_intersect = $payment_methods_collections->intersectByKeys($payment_methods_collections->flatten(1)->unique());
+        $response->assertStatus(200);
+        $arr = $response->json();
 
-        $this->assertEquals(4, $payment_methods_intersect->count());
+        $this->assertEquals($invoice_count + 2, count($arr['data']));
 
-        $payment_urls = [];
+        $response = $this->withHeaders([
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->get('/api/v1/invoices?upcoming=true&status=active&without_deleted_clients=true');
 
-        foreach ($payment_methods_intersect as $key => $child_array) {
-            foreach ($child_array as $gateway_id => $gateway_type_id) {
-                $gateway = $gateways->where('id', $gateway_id)->first();
+        $response->assertStatus(200);
+        $arr = $response->json();
 
-                $this->assertNotNull($gateway);
+        $this->assertEquals($invoice_count + 2, count($arr['data']));
 
-                $fee_label = $gateway->calcGatewayFeeLabel($amount, $this->client);
 
-                $payment_urls[] = [
-                'label' => ctrans('texts.'.$gateway->getTypeAlias($gateway_type_id)).$fee_label,
-                'url'   =>  URL::signedRoute('client.payments.process', [
-                                            'company_gateway_id' => $gateway_id,
-                                            'gateway_type_id' => $gateway_type_id, ]),
-                            ];
-            }
-        }
+        $response = $this->withHeaders([
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->get('/api/v1/invoices?upcoming=true&status=active&filter_deleted_clients=true');
 
-        $this->assertEquals(4, count($payment_urls));
+        $response->assertStatus(200);
+        $arr = $response->json();
+
+        $this->assertEquals($invoice_count + 2, count($arr['data']));
+
+        $cd2->is_deleted = true;
+        $cd2->save();
+
+        $response = $this->withHeaders([
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->get('/api/v1/invoices?upcoming=true&status=active&without_deleted_clients=true');
+
+        $response->assertStatus(200);
+        $arr = $response->json();
+
+        $this->assertEquals($invoice_count + 1, count($arr['data']));
+
+
+        $response = $this->withHeaders([
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->get('/api/v1/invoices?upcoming=true&status=active&filter_deleted_clients=true');
+
+        $response->assertStatus(200);
+        $arr = $response->json();
+
+        $this->assertEquals($invoice_count + 1, count($arr['data']));
+
+
+    }
+
+    public function testPaymentMethodsWithCreditsEnforced()
+    {
+
+        $payment_methods = $this->client->service()->getPaymentMethods(40);
+
+        $this->assertGreaterThan(0, CompanyGateway::count());
+
+        $this->assertEquals(2, count($payment_methods));
     }
 }

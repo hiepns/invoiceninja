@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Transformers;
@@ -45,9 +46,11 @@ class ClientContactTransformer extends EntityTransformer
             'custom_value4' => $contact->custom_value4 ?: '',
             'contact_key' => $contact->contact_key ?: '',
             'send_email' => (bool) $contact->send_email,
+            'cc_only' => (bool) $contact->cc_only,
             'last_login' => (int) $contact->last_login,
             'password' => empty($contact->password) ? '' : '**********',
             'link' => $contact->getLoginLink(),
+            'can_sign' => (bool) $contact->can_sign,
         ];
     }
 }

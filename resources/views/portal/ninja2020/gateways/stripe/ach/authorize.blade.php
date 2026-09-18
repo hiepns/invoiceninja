@@ -1,7 +1,20 @@
 @extends('portal.ninja2020.layout.payments', ['gateway_title' => 'ACH', 'card_title' => 'ACH'])
 
 @section('gateway_head')
-    <meta name="stripe-publishable-key" content="{{ $gateway->getPublishableKey() }}">
+    @if($gateway->company_gateway->getConfigField('account_id'))
+    <meta name="stripe-account-id" content="{{ $gateway->company_gateway->getConfigField('account_id') }}">
+    <meta name="stripe-publishable-key" content="{{ config('ninja.ninja_stripe_publishable_key') }}">
+    @else
+    <meta name="stripe-publishable-key" content="{{ $gateway->company_gateway->getPublishableKey() }}">
+    @endif
+    <meta name="stripe-client-secret" content="{{ $client_secret }}">
+    <meta name="contact-email" content="{{ auth()->guard('contact')->user()->email }}">
+    <meta name="address-1" content="{{ $gateway->client->address1 }}">
+    <meta name="address-2" content="{{ $gateway->client->address2 }}">
+    <meta name="city" content="{{ $gateway->client->city }}">
+    <meta name="state" content="{{ $gateway->client->state }}">
+    <meta name="postal_code" content="{{ $gateway->client->postal_code }}">
+    <meta name="country" content="{{ $gateway->client->country?->iso_3166_2 }}">
 @endsection
 
 @section('gateway_content')
@@ -13,8 +26,8 @@
 
     <form action="{{ route('client.payment_methods.store', ['method' => App\Models\GatewayType::BANK_TRANSFER]) }}" method="post" id="server_response">
         @csrf
-       
-        <input type="hidden" name="company_gateway_id" value="{{ $gateway->id }}">
+
+        <input type="hidden" name="company_gateway_id" value="{{ $gateway->company_gateway->id }}">
         <input type="hidden" name="gateway_type_id" value="2">
         <input type="hidden" name="gateway_response" id="gateway_response">
         <input type="hidden" name="is_default" id="is_default">
@@ -34,36 +47,12 @@
     @endcomponent
 
     @component('portal.ninja2020.components.general.card-element', ['title' => ctrans('texts.account_holder_name')])
-        <input class="input w-full" id="account-holder-name" type="text" placeholder="{{ ctrans('texts.name') }}" required>
-    @endcomponent
-
-    @component('portal.ninja2020.components.general.card-element', ['title' => ctrans('texts.country')])
-        <select name="countries" id="country" class="form-select input w-full" required>
-            @foreach($countries as $country)
-                <option value="{{ $country->iso_3166_2 }}">{{ $country->iso_3166_2 }} ({{ $country->name }})</option>
-            @endforeach
-        </select>
-    @endcomponent
-
-    @component('portal.ninja2020.components.general.card-element', ['title' => ctrans('texts.currency')])
-        <select name="currencies" id="currency" class="form-select input w-full">
-            @foreach($currencies as $currency)
-                <option value="{{ $currency->code }}">{{ $currency->code }} ({{ $currency->name }})</option>
-            @endforeach
-        </select>
-    @endcomponent
-
-    @component('portal.ninja2020.components.general.card-element', ['title' => ctrans('texts.routing_number')])
-        <input class="input w-full" id="routing-number" type="text" required>
-    @endcomponent
-    
-    @component('portal.ninja2020.components.general.card-element', ['title' => ctrans('texts.account_number')])
-        <input class="input w-full" id="account-number" type="text" required>
+        <input class="input w-full" id="account-holder-name" type="text" placeholder="{{ ctrans('texts.name') }}" required value="{{ auth()->guard('contact')->user()->client->present()->name() }}">
     @endcomponent
 
     @component('portal.ninja2020.components.general.card-element-single')
         <input type="checkbox" class="form-checkbox mr-1" id="accept-terms" required>
-        <label for="accept-terms" class="cursor-pointer">{{ ctrans('texts.ach_authorization', ['company' => auth()->user()->company->present()->name, 'email' => auth()->user()->company->email]) }}</label>
+        <label for="accept-terms" class="cursor-pointer">{{ ctrans('texts.ach_authorization', ['company' => auth()->guard('contact')->user()->company->present()->name, 'email' => auth()->guard('contact')->user()->client->company->settings->email]) }}</label>
     @endcomponent
 
     @component('portal.ninja2020.gateways.includes.pay_now', ['id' => 'save-button'])
@@ -73,5 +62,5 @@
 
 @section('gateway_footer')
     <script src="https://js.stripe.com/v3/"></script>
-    <script src="{{ asset('js/clients/payments/stripe-ach.js') }}"></script>
+    @vite('resources/js/clients/payments/stripe-ach.js')
 @endsection

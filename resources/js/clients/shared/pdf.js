@@ -3,9 +3,9 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license 
  */
 
 class PDF {
@@ -15,11 +15,11 @@ class PDF {
         this.context = canvas.getContext('2d');
         this.currentPage = 1;
         this.maxPages = 1;
-        this.currentScale = 1.75;
+        this.currentScale = 1;
         this.currentScaleText = document.getElementById('zoom-level');
 
         if (matchMedia('only screen and (max-width: 480px)').matches) {
-            this.currentScale = 0.5;
+            this.currentScale = 1;
         }
 
         this.currentScaleText.textContent = this.currentScale * 100 + '%';
@@ -80,6 +80,15 @@ class PDF {
             .getElementById('zoom-out')
             .addEventListener('click', () => this.handleZoomChange());
 
+        document
+            .querySelector('meta[name=pdf-url]')
+            .addEventListener('change', () => {
+                this.canvas.getContext('2d').clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.url = document.querySelector("meta[name='pdf-url']").content;
+
+                this.handle();
+            })
+
         return this;
     }
 
@@ -122,10 +131,28 @@ class PDF {
         });
 
         this.setPagesInViewport();
+
+        /* document.addEventListener("webviewerloaded", function () {
+            PDFViewerApplication.initializedPromise.then(function () {
+                PDFViewerApplication.eventBus.on("pagerendered", function handler(event) {
+                    try {
+                        if (window.chrome && !/Edge/.test(navigator.userAgent) && !event.source.__rerendered) {
+                            console.log("Chrome-like browser detected, re-rendering page %d for the first time.", event.pageNumber);
+                            var currentScale = event.source.scale;
+                            event.source.__rerendered = true;
+                            event.source.update(currentScale * 0.99);
+                            event.source.update(currentScale);
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                });
+            });
+        }); */
     }
 }
 
-const url = document.querySelector("meta[name='pdf-url'").content;
+const url = document.querySelector("meta[name='pdf-url']").content;
 const canvas = document.getElementById('pdf-placeholder');
 
 new PDF(url, canvas).prepare().handle();

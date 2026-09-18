@@ -1,29 +1,51 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Activity\DownloadHistoricalEntityRequest;
+use App\Http\Requests\Activity\ShowActivityRequest;
+use App\Http\Requests\Activity\StoreNoteRequest;
 use App\Models\Activity;
+use App\Models\Client;
+use App\Models\Credit;
+use App\Models\Expense;
+use App\Models\Invoice;
+use App\Models\Payment;
+use App\Models\Project;
+use App\Models\PurchaseOrder;
+use App\Models\Quote;
+use App\Models\RecurringExpense;
+use App\Models\RecurringInvoice;
+use App\Models\Task;
+use App\Models\Vendor;
+use App\Services\Pdf\Purify;
 use App\Transformers\ActivityTransformer;
+use App\Utils\HostedPDF\NinjaPdf;
+use App\Utils\Ninja;
+use App\Utils\PhantomJS\Phantom;
+use App\Utils\Traits\MakesHash;
+use App\Utils\Traits\Pdf\PageNumbering;
 use App\Utils\Traits\Pdf\PdfMaker;
-use Illuminate\Http\JsonResponse;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
 use stdClass;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ActivityController extends BaseController
 {
     use PdfMaker;
+    use PageNumbering;
+    use MakesHash;
 
     protected $entity_type = Activity::class;
 
@@ -34,125 +56,291 @@ class ActivityController extends BaseController
         parent::__construct();
     }
 
-    /**
-     * @OA\Get(
-     *      path="/api/v1/actvities",
-     *      operationId="getActivities",
-     *      tags={"actvities"},
-     *      summary="Gets a list of actvities",
-     *      description="Lists all activities",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(ref="#/components/parameters/include"),
-     *      @OA\Parameter(ref="#/components/parameters/index"),
-     *      @OA\Parameter(
-     *          name="rows",
-     *          in="query",
-     *          description="The number of activities to return",
-     *          example="50",
-     *          required=false,
-     *          @OA\Schema(
-     *              type="number",
-     *              format="integer",
-     *          ),
-     *      ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="A list of actvities",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *          @OA\JsonContent(ref="#/components/schemas/Activity"),
-     *       ),
-     *       @OA\Response(
-     *          response=422,
-     *          description="Validation error",
-     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
-     * @param Request $request
-     * @return Response|mixed
-     */
     public function index(Request $request)
     {
-        $default_activities = $request->has('rows') ? $request->input('rows') : 50;
+        $default_activities = $request->has('rows') ? $request->input('rows') : 75;
 
-        $activities = Activity::orderBy('created_at', 'DESC')->company()
+        if ($request->has('reactv2')) {
+
+            /** @var \App\Models\User auth()->user() */
+            $user = auth()->user();
+
+            $activities = $this->activityFeedQuery($default_activities);
+
+            if (!$user->isAdmin()) {
+                $activities->where('user_id', auth()->user()->id);
+            }
+
+            return response()->json(['data' => $this->activityStringPayload($activities)], 200);
+        }
+
+        /* @var App\Models\Activity[] $activities */
+        $activities = Activity::with('user')
+                                ->orderBy('created_at', 'DESC')
+                                ->company()
                                 ->take($default_activities);
 
         return $this->listResponse($activities);
     }
 
+    public function entityActivity(ShowActivityRequest $request)
+    {
+
+        $default_activities = request()->has('rows') ? request()->input('rows') : 75;
+
+        $activities = $this->activityFeedQuery($default_activities)
+                                ->where("{$request->entity}_id", $request->entity_id);
+
+        /** @var \App\Models\User auth()->user() */
+        $user = auth()->user();
+
+        $entity = $request->getEntity();
+
+        if ($user->cannot('view', $entity)) {
+            $activities->where('user_id', auth()->user()->id);
+        }
+
+        return response()->json(['data' => $this->activityStringPayload($activities)], 200);
+
+    }
+
     /**
-     * @OA\Get(
-     *      path="/api/v1/actvities/download_entity/{activity_id}",
-     *      operationId="getActivityHistoricalEntityPdf",
-     *      tags={"actvities"},
-     *      summary="Gets a PDF for the given activity",
-     *      description="Gets a PDF for the given activity",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(
-     *          name="activity_id",
-     *          in="path",
-     *          description="The Activity Hashed ID",
-     *          example="D2J234DFA",
-     *          required=true,
-     *          @OA\Schema(
-     *              type="string",
-     *              format="string",
-     *          ),
-     *      ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="PDF File",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *       ),
-     *       @OA\Response(
-     *          response=404,
-     *          description="No file exists for the given record",
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
-     * @param DownloadHistoricalEntityRequest $request
-     * @param Activity $activity
-     * @return JsonResponse|StreamedResponse
+     * @return array<int, array<string, mixed>>
+     */
+    private function activityStringPayload(Builder $activities): array
+    {
+        return $activities->get()
+            ->map(function ($activity) {
+
+                /** @var \App\Models\Activity $activity */
+                return $activity->activity_string();
+
+            })
+            ->values()
+            ->all();
+    }
+
+    private function activityFeedQuery(int $limit): Builder
+    {
+        return Activity::query()
+            ->without('backup')
+            ->with($this->activityStringRelations())
+            ->orderBy('created_at', 'DESC')
+            ->company()
+            ->take($limit);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function activityStringRelations(): array
+    {
+        return [
+            'user',
+            'client',
+            'vendor',
+            'invoice',
+            'quote',
+            'credit',
+            'payment.client',
+            'task',
+            'expense',
+            'purchase_order',
+            'subscription',
+            'recurring_invoice',
+            'recurring_expense',
+            'contact',
+            'vendor_contact',
+            'company',
+        ];
+    }
+
+
+    /**
+     * downloadHistoricalEntity
+     *
+     * @param  DownloadHistoricalEntityRequest $request
+     * @param  Activity $activity
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse | \Illuminate\Http\JsonResponse
      */
     public function downloadHistoricalEntity(DownloadHistoricalEntityRequest $request, Activity $activity)
     {
         $backup = $activity->backup;
+        $html_backup = '';
 
-        if (! $backup || ! $backup->html_backup) {
-            return response()->json(['message'=> 'No backup exists for this activity', 'errors' => new stdClass], 404);
+
+        if (!$activity->backup) {
+            return response()->json(['message' => ctrans('texts.no_backup_exists'), 'errors' => new stdClass()], 404);
         }
 
-        $pdf = $this->makePdf(null, null, $backup->html_backup);
+        $file = $backup->getFile();
+
+        $html_backup = $file;
+
+        if (!$file) {
+            return response()->json(['message' => ctrans('texts.no_backup_exists'), 'errors' => new stdClass()], 404);
+        }
+
+        if (config('ninja.phantomjs_pdf_generation') || config('ninja.pdf_generator') == 'phantom') {
+            $pdf = (new Phantom())->convertHtmlToPdf($html_backup);
+
+            $numbered_pdf = $this->pageNumbering($pdf, $activity->company);
+
+            if ($numbered_pdf) {
+                $pdf = $numbered_pdf;
+            }
+        } elseif (config('ninja.invoiceninja_hosted_pdf_generation') || config('ninja.pdf_generator') == 'hosted_ninja') {
+            $pdf = (new NinjaPdf())->build($html_backup);
+
+            $numbered_pdf = $this->pageNumbering($pdf, $activity->company);
+
+            if ($numbered_pdf) {
+                $pdf = $numbered_pdf;
+            }
+        } else {
+            $pdf = $this->makePdf(null, null, Purify::clean($html_backup));
+
+            $numbered_pdf = $this->pageNumbering($pdf, $activity->company);
+
+            if ($numbered_pdf) {
+                $pdf = $numbered_pdf;
+            }
+        }
+
+        $activity->company->setLocale();
 
         if (isset($activity->invoice_id)) {
-            $filename = $activity->invoice->number.'.pdf';
+            $filename = $activity->invoice->numberFormatter() . '.pdf';
         } elseif (isset($activity->quote_id)) {
-            $filename = $activity->quote->number.'.pdf';
+            $filename = $activity->quote->numberFormatter() . '.pdf';
         } elseif (isset($activity->credit_id)) {
-            $filename = $activity->credit->number.'.pdf';
+            $filename = $activity->credit->numberFormatter() . '.pdf';
         } else {
             $filename = 'backup.pdf';
         }
 
         return response()->streamDownload(function () use ($pdf) {
             echo $pdf;
-        }, $filename);
+        }, $filename, ['Content-Type' => 'application/pdf']);
+    }
+
+    public function note(StoreNoteRequest $request)
+    {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $entity = $request->getEntity();
+
+        $activity = new Activity();
+        $activity->account_id = $user->account_id;
+        $activity->company_id = $user->company()->id;
+        $activity->notes = $request->notes;
+        $activity->user_id = $user->id;
+        $activity->ip = $request->ip();
+        $activity->activity_type_id = Activity::USER_NOTE;
+
+        switch (get_class($entity)) {
+            case Invoice::class:
+                $activity->invoice_id = $entity->id;
+                $activity->client_id = $entity->client_id;
+                $activity->project_id = $entity->project_id;
+                $activity->vendor_id = $entity->vendor_id;
+
+                $activity->save();
+                return $this->itemResponse($activity);
+
+            case Credit::class:
+                $activity->credit_id = $entity->id;
+                $activity->client_id = $entity->client_id;
+                $activity->project_id = $entity->project_id;
+                $activity->vendor_id = $entity->vendor_id;
+                $activity->invoice_id = $entity->invoice_id;
+
+                $activity->save();
+                return $this->itemResponse($activity);
+
+            case Client::class:
+                $activity->client_id = $entity->id;
+
+                $activity->save();
+                return $this->itemResponse($activity);
+
+            case Quote::class:
+                $activity->quote_id = $entity->id;
+                $activity->client_id = $entity->client_id;
+                $activity->project_id = $entity->project_id;
+                $activity->vendor_id = $entity->vendor_id;
+
+                $activity->save();
+                return $this->itemResponse($activity);
+
+            case RecurringInvoice::class:
+                $activity->recurring_invoice_id = $entity->id;
+                $activity->client_id = $entity->client_id;
+
+                $activity->save();
+                return $this->itemResponse($activity);
+
+            case Expense::class:
+                $activity->expense_id = $entity->id;
+                $activity->client_id = $entity->client_id;
+                $activity->project_id = $entity->project_id;
+                $activity->vendor_id = $entity->vendor_id;
+
+                $activity->save();
+                return $this->itemResponse($activity);
+            case RecurringExpense::class:
+                $activity->recurring_expense_id = $entity->id;
+                $activity->expense_id = $entity->id;
+                $activity->client_id = $entity->client_id;
+                $activity->project_id = $entity->project_id;
+                $activity->vendor_id = $entity->vendor_id;
+
+                $activity->save();
+                return $this->itemResponse($activity);
+            case Vendor::class:
+                $activity->vendor_id = $entity->id;
+                $activity->save();
+
+                return $this->itemResponse($activity);
+
+            case PurchaseOrder::class:
+                $activity->purchase_order_id = $entity->id;
+                $activity->expense_id = $entity->id;
+                $activity->client_id = $entity->client_id;
+                $activity->project_id = $entity->project_id;
+                $activity->vendor_id = $entity->vendor_id;
+
+                $activity->save();
+
+                return $this->itemResponse($activity);
+            case Task::class:
+                $activity->task_id = $entity->id;
+                $activity->client_id = $entity->client_id;
+                $activity->project_id = $entity->project_id;
+
+                $activity->save();
+
+                return $this->itemResponse($activity);
+
+            case Payment::class:
+                $activity->payment_id = $entity->id;
+                $activity->client_id = $entity->client_id;
+                $activity->project_id = $entity->project_id;
+
+                $activity->save();
+                return $this->itemResponse($activity);
+
+            case Project::class:
+                $activity->project_id = $entity->id;
+                $activity->save();
+
+                return $this->itemResponse($activity);
+            default:
+                # code...
+                break;
+        }
+
+
     }
 }

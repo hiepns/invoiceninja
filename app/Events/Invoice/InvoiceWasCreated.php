@@ -1,25 +1,32 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Events\Invoice;
 
 use App\Models\Company;
 use App\Models\Invoice;
+use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
  * Class InvoiceWasCreated.
  */
-class InvoiceWasCreated
+class InvoiceWasCreated implements ShouldBroadcast
 {
+    use Dispatchable;
+    use InteractsWithSockets;
     use SerializesModels;
 
     /**
@@ -44,4 +51,25 @@ class InvoiceWasCreated
         $this->company = $company;
         $this->event_vars = $event_vars;
     }
+
+    /**
+     * Get the channels the event should broadcast on.
+     *
+     * @return PrivateChannel|array
+     */
+    public function broadcastOn()
+    {
+        return [];
+    }
+
+
+    // /**
+    //  * Get the data to broadcast.
+    //  *
+    //  * @return array<string, mixed>
+    //  */
+    // public function broadcastWith(): array
+    // {
+    //     return ['id' => 'value'];
+    // }
 }

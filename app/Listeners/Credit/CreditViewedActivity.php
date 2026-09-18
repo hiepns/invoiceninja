@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Credit Ninja (https://creditninja.com).
  *
  * @link https://github.com/creditninja/creditninja source repository
  *
- * @copyright Copyright (c) 2020. Credit Ninja LLC (https://creditninja.com)
+ * @copyright Copyright (c) 2022. Credit Ninja LLC (https://creditninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Listeners\Credit;
@@ -41,9 +42,13 @@ class CreditViewedActivity implements ShouldQueue
     {
         MultiDB::setDb($event->company->db);
 
-        $fields = new stdClass;
+        $event->invitation->credit->service()->markSent()->save();
 
-        $fields->user_id = $event->invitation->user_id;
+        $fields = new stdClass();
+
+        $user_id = $event->event_vars['user_id'] ?? $event->invitation->user_id;
+
+        $fields->user_id = $user_id;
         $fields->company_id = $event->invitation->company_id;
         $fields->activity_type_id = Activity::VIEW_CREDIT;
         $fields->client_id = $event->invitation->credit->client_id;

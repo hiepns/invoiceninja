@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules;
@@ -17,10 +18,18 @@ use Illuminate\Contracts\Validation\Rule;
 
 /**
  * Class ValidCreditsPresentRule.
+ * @deprecated 20-03-2024
  */
 class ValidCreditsPresentRule implements Rule
 {
     use MakesHash;
+
+    private $input;
+
+    public function __construct($input)
+    {
+        $this->input = $input;
+    }
 
     /**
      * @param string $attribute
@@ -37,32 +46,14 @@ class ValidCreditsPresentRule implements Rule
      */
     public function message()
     {
-        return 'Insufficient balance on credit.';
+        return ctrans('texts.insufficient_credit_balance');
     }
 
-    private function validCreditsPresent() :bool
+    private function validCreditsPresent(): bool
     {
-        //todo need to ensure the clients credits are here not random ones!
-
-        // if (request()->input('credits') && is_array(request()->input('credits'))) {
-        //     foreach (request()->input('credits') as $credit) {
-        //         $cred = Credit::find($this->decodePrimaryKey($credit['credit_id']));
-
-        //         if (! $cred || $cred->balance == 0) {
-        //             return false;
-        //         }
-        //     }
-        // }
-
-        // return  true;
-
-
-        if (request()->input('credits') && is_array(request()->input('credits'))) {
-            $credit_collection = Credit::whereIn('id', $this->transformKeys(array_column(request()->input('credits'), 'credit_id')))
-                                       ->where('balance', '>', 0)
-                                       ->get();
-
-            return $credit_collection->count() == count(request()->input('credits'));
+        if (array_key_exists('credits', $this->input) && is_array($this->input['credits']) && count($this->input['credits']) > 0) {
+            $credit_collection = Credit::query()->whereIn('id', array_column($this->input['credits'], 'credit_id'))->count();
+            return $credit_collection == count($this->input['credits']);
         }
 
         return true;

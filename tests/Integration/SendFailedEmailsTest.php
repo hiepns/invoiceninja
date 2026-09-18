@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Integration;
 
 use App\Jobs\Util\SendFailedEmails;
@@ -17,15 +19,15 @@ use Tests\MockAccountData;
 use Tests\TestCase;
 
 /**
- * @test
- * @covers App\Jobs\Util\SendFailedEmails
+ *
+ *  App\Jobs\Util\SendFailedEmails
  */
 class SendFailedEmailsTest extends TestCase
 {
     use MockAccountData;
     use DatabaseTransactions;
 
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -45,7 +47,7 @@ class SendFailedEmailsTest extends TestCase
             'body' => '',
         ];
 
-        $system_log = new SystemLog;
+        $system_log = new SystemLog();
         $system_log->company_id = $this->invoice->company_id;
         $system_log->client_id = $this->invoice->client_id;
         $system_log->category_id = SystemLog::CATEGORY_MAIL;

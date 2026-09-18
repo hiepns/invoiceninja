@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules;
@@ -20,6 +21,7 @@ use Illuminate\Contracts\Validation\Rule;
 class ValidSettingsRule implements Rule
 {
     use SettingsSaver;
+
     /**
      * @param string $attribute
      * @param mixed $value
@@ -45,6 +47,10 @@ class ValidSettingsRule implements Rule
      */
     public function message()
     {
-        return $this->return_data[0].' is not a valid '.$this->return_data[1].' ( '.$this->return_data[2].' )';
+        $value = is_scalar($this->return_data[2]) || is_null($this->return_data[2])
+            ? (string) $this->return_data[2]
+            : json_encode($this->return_data[2]);
+
+        return $this->return_data[0] . ' is not a valid ' . $this->return_data[1] . ' ( ' . $value . ' )';
     }
 }

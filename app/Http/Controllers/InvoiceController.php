@@ -5,9 +5,9 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
@@ -15,32 +15,46 @@ namespace App\Http\Controllers;
 use App\Events\Invoice\InvoiceWasCreated;
 use App\Events\Invoice\InvoiceWasUpdated;
 use App\Factory\CloneInvoiceFactory;
+use App\Factory\CloneInvoiceToPurchaseOrderFactory;
 use App\Factory\CloneInvoiceToQuoteFactory;
 use App\Factory\InvoiceFactory;
+use App\Factory\SchedulerFactory;
 use App\Filters\InvoiceFilters;
+use App\Helpers\Cache\Atomic;
 use App\Http\Requests\Invoice\ActionInvoiceRequest;
+use App\Http\Requests\Invoice\BulkInvoiceRequest;
 use App\Http\Requests\Invoice\CreateInvoiceRequest;
 use App\Http\Requests\Invoice\DestroyInvoiceRequest;
 use App\Http\Requests\Invoice\EditInvoiceRequest;
 use App\Http\Requests\Invoice\ShowInvoiceRequest;
 use App\Http\Requests\Invoice\StoreInvoiceRequest;
 use App\Http\Requests\Invoice\UpdateInvoiceRequest;
-use App\Jobs\Entity\EmailEntity;
-use App\Jobs\Invoice\StoreInvoice;
-use App\Jobs\Invoice\ZipInvoices;
-use App\Jobs\Util\UnlinkFile;
-use App\Models\Client;
+use App\Http\Requests\Invoice\UpdateReminderRequest;
+use App\Http\Requests\Invoice\UploadInvoiceRequest;
+use App\Http\Requests\TaskScheduler\DeletePaymentScheduleRequest;
+use App\Http\Requests\TaskScheduler\PaymentScheduleRequest;
+use App\Jobs\Cron\AutoBill;
+use App\Jobs\Entity\ZipEntity;
+use App\Jobs\Invoice\BulkInvoiceJob;
+use App\Jobs\Invoice\UpdateReminders;
+use App\Models\Account;
 use App\Models\Invoice;
+use App\Models\PurchaseOrder;
 use App\Models\Quote;
+use App\Models\Scheduler;
 use App\Repositories\InvoiceRepository;
+use App\Repositories\SchedulerRepository;
+use App\Services\PdfMaker\BatchPdfService;
+use App\Services\PdfMaker\PdfMerge;
+use App\Services\Template\TemplateAction;
 use App\Transformers\InvoiceTransformer;
+use App\Transformers\PurchaseOrderTransformer;
 use App\Transformers\QuoteTransformer;
 use App\Utils\Ninja;
-use App\Utils\TempFile;
 use App\Utils\Traits\MakesHash;
-use Illuminate\Http\Request;
+use App\Utils\Traits\SavesDocuments;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -49,6 +63,7 @@ use Illuminate\Support\Facades\Storage;
 class InvoiceController extends BaseController
 {
     use MakesHash;
+    use SavesDocuments;
 
     protected $entity_type = Invoice::class;
 
@@ -76,7 +91,7 @@ class InvoiceController extends BaseController
      *
      * @param InvoiceFilters $filters  The filters
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      * @OA\Get(
      *      path="/api/v1/invoices",
@@ -86,8 +101,7 @@ class InvoiceController extends BaseController
      *      description="Lists invoices, search and filters allow fine grained lists to be generated.
      *
      *		Query parameters can be added to performed more fine grained filtering of the invoices, these are handled by the InvoiceFilters class which defines the methods available",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -102,7 +116,6 @@ class InvoiceController extends BaseController
      *          response=422,
      *          description="Validation error",
      *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-
      *       ),
      *       @OA\Response(
      *           response="default",
@@ -113,7 +126,9 @@ class InvoiceController extends BaseController
      */
     public function index(InvoiceFilters $filters)
     {
-        $invoices = Invoice::filter($filters);
+        set_time_limit(45);
+
+        $invoices = Invoice::filter($filters)->with('tags');
 
         return $this->listResponse($invoices);
     }
@@ -123,7 +138,7 @@ class InvoiceController extends BaseController
      *
      * @param CreateInvoiceRequest $request  The request
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -132,8 +147,7 @@ class InvoiceController extends BaseController
      *      tags={"invoices"},
      *      summary="Gets a new blank invoice object",
      *      description="Returns a blank object with default values",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -159,7 +173,18 @@ class InvoiceController extends BaseController
      */
     public function create(CreateInvoiceRequest $request)
     {
-        $invoice = InvoiceFactory::create(auth()->user()->company()->id, auth()->user()->id);
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        /** @var \App\Models\Company $company */
+        $company = auth()->user()->company();
+
+        $invoice = InvoiceFactory::create($user->company()->id, $user->id);
+        $invoice->date = now()->addSeconds($user->company()->utc_offset())->format('Y-m-d');
+        $invoice->custom_surcharge_tax1 = $company->custom_surcharge_taxes1;
+        $invoice->custom_surcharge_tax2 = $company->custom_surcharge_taxes2;
+        $invoice->custom_surcharge_tax3 = $company->custom_surcharge_taxes3;
+        $invoice->custom_surcharge_tax4 = $company->custom_surcharge_taxes4;
 
         return $this->itemResponse($invoice);
     }
@@ -169,7 +194,7 @@ class InvoiceController extends BaseController
      *
      * @param StoreInvoiceRequest $request  The request
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Post(
@@ -178,10 +203,13 @@ class InvoiceController extends BaseController
      *      tags={"invoices"},
      *      summary="Adds a invoice",
      *      description="Adds an invoice to the system",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
+     *      @OA\RequestBody(
+     *          required=true,
+     *          @OA\JsonContent(ref="#/components/schemas/FillableInvoice")
+     *      ),
      *      @OA\Response(
      *          response=200,
      *          description="Returns the saved invoice object",
@@ -205,16 +233,21 @@ class InvoiceController extends BaseController
      */
     public function store(StoreInvoiceRequest $request)
     {
-        $client = Client::find($request->input('client_id'));
 
-        $invoice = $this->invoice_repo->save($request->all(), InvoiceFactory::create(auth()->user()->company()->id, auth()->user()->id));
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        event(new InvoiceWasCreated($invoice, $invoice->company, Ninja::eventVars()));
+        $invoice = $this->invoice_repo->save($request->all(), InvoiceFactory::create($user->company()->id, $user->id));
 
         $invoice = $invoice->service()
                            ->fillDefaults()
                            ->triggeredActions($request)
+                           ->adjustInventory()
                            ->save();
+
+        event(new InvoiceWasCreated($invoice, $invoice->company, Ninja::eventVars($user ? $user->id : null)));
+
+        Atomic::del($request->lock_key);
 
         return $this->itemResponse($invoice);
     }
@@ -225,7 +258,7 @@ class InvoiceController extends BaseController
      * @param ShowInvoiceRequest $request  The request
      * @param Invoice $invoice  The invoice
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -234,8 +267,7 @@ class InvoiceController extends BaseController
      *      tags={"invoices"},
      *      summary="Shows an invoice",
      *      description="Displays an invoice by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -281,7 +313,7 @@ class InvoiceController extends BaseController
      * @param EditInvoiceRequest $request  The request
      * @param Invoice $invoice  The invoice
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      * @OA\Get(
      *      path="/api/v1/invoices/{id}/edit",
@@ -289,8 +321,7 @@ class InvoiceController extends BaseController
      *      tags={"invoices"},
      *      summary="Shows an invoice for editting",
      *      description="Displays an invoice by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -336,7 +367,7 @@ class InvoiceController extends BaseController
      * @param UpdateInvoiceRequest $request  The request
      * @param Invoice $invoice  The invoice
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Put(
@@ -345,8 +376,7 @@ class InvoiceController extends BaseController
      *      tags={"invoices"},
      *      summary="Updates an invoice",
      *      description="Handles the updating of an invoice by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -383,21 +413,43 @@ class InvoiceController extends BaseController
      */
     public function update(UpdateInvoiceRequest $request, Invoice $invoice)
     {
-        if ($request->entityIsDeleted($invoice)) {
-            return $request->disallowUpdate();
+        try {
+            if ($request->entityIsDeleted($invoice)) {
+                return $request->disallowUpdate();
+            }
+
+            if (($invoice->isLocked() || $invoice->company->verifactuEnabled()) && $request->input('paid') == 'true') {
+
+                $invoice->service()
+                        ->triggeredActions($request);
+
+                return $this->itemResponse($invoice->fresh());
+            } elseif ($invoice->isLocked()) {
+                return response()->json(['message' => '', 'errors' => ['number' => ctrans('texts.locked_invoice')]], 422);
+            }
+
+            $old_invoice = $invoice->line_items;
+
+            $invoice = $this->invoice_repo->save($request->all(), $invoice);
+
+            $invoice->service()
+                    ->triggeredActions($request)
+                    ->adjustInventory($old_invoice);
+
+            $skip_event = $request->has('mark_sent') || $request->has('send_email') || ($request->input('paid') == 'true');
+
+            if (!$skip_event) {
+                event(new InvoiceWasUpdated($invoice, $invoice->company, Ninja::eventVars(auth()->user() ? auth()->user()->id : null)));
+            }
+
+            return $this->itemResponse($invoice->fresh());
+        } finally {
+            $lock_key = $request->input('lock_key');
+
+            if ($request->input('paid') == 'true' && is_string($lock_key) && strlen($lock_key) > 0) {
+                Atomic::del($lock_key);
+            }
         }
-
-        if ($invoice->isLocked()) {
-            return response()->json(['message' => 'Invoice is locked, no modifications allowed']);
-        }
-
-        $invoice = $this->invoice_repo->save($request->all(), $invoice);
-
-        UnlinkFile::dispatchNow(config('filesystems.default'), $invoice->client->invoice_filepath().$invoice->number.'.pdf');
-
-        event(new InvoiceWasUpdated($invoice, $invoice->company, Ninja::eventVars()));
-
-        return $this->itemResponse($invoice);
     }
 
     /**
@@ -415,8 +467,7 @@ class InvoiceController extends BaseController
      *      tags={"invoices"},
      *      summary="Deletes a invoice",
      *      description="Handles the deletion of an invoice by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -452,103 +503,188 @@ class InvoiceController extends BaseController
      */
     public function destroy(DestroyInvoiceRequest $request, Invoice $invoice)
     {
-        $invoice->delete();
 
-        return response()->json([], 200);
+        if (!$invoice->is_deleted) {
+            $this->invoice_repo->delete($invoice);
+        }
+
+        return $this->itemResponse($invoice->fresh());
     }
 
-    /**
-     * Perform bulk actions on the list view.
-     *
-     * @return Collection
-     *
-     * @OA\Post(
-     *      path="/api/v1/invoices/bulk",
-     *      operationId="bulkInvoices",
-     *      tags={"invoices"},
-     *      summary="Performs bulk actions on an array of invoices",
-     *      description="",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
-     *      @OA\Parameter(ref="#/components/parameters/index"),
-     *      @OA\RequestBody(
-     *         description="User credentials",
-     *         required=true,
-     *         @OA\MediaType(
-     *             mediaType="application/json",
-     *             @OA\Schema(
-     *                 type="array",
-     *                 @OA\Items(
-     *                     type="integer",
-     *                     description="Array of hashed IDs to be bulk 'actioned",
-     *                     example="[0,1,2,3]",
-     *                 ),
-     *             )
-     *         )
-     *     ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="The Bulk Action response",
-     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
-     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
-     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
-     *       ),
-     *       @OA\Response(
-     *          response=422,
-     *          description="Validation error",
-     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
-
-     *       ),
-     *       @OA\Response(
-     *           response="default",
-     *           description="Unexpected Error",
-     *           @OA\JsonContent(ref="#/components/schemas/Error"),
-     *       ),
-     *     )
-     */
-    public function bulk()
+    public function bulk(BulkInvoiceRequest $request)
     {
 
-        /*
-         * WIP!
-         */
-        $action = request()->input('action');
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        $ids = request()->input('ids');
+        $action = $request->input('action');
+        $ids = $request->input('ids');
+
+        if (Ninja::isHosted() && (stripos($action, 'email') !== false) && !$user->company()->account->account_sms_verified) {
+            Atomic::del($request->lock_key);
+            return response(['message' => 'Please verify your account to send emails.'], 400);
+        }
+
+        if (Ninja::isHosted() && $user->account->emailQuotaExceeded()) {
+            Atomic::del($request->lock_key);
+            return response(['message' => ctrans('texts.email_quota_exceeded_subject')], 400);
+        }
+
+        if ($user->hasExactPermission('disable_emails') && (stripos($action, 'email') !== false)) {
+            Atomic::del($request->lock_key);
+            return response(['message' => ctrans('texts.disable_emails_error')], 400);
+        }
+
+        if (in_array($request->action, ['auto_bill', 'mark_paid']) && $user->cannot('create', \App\Models\Payment::class)) {
+            Atomic::del($request->lock_key);
+            return response(['message' => ctrans('texts.not_authorized'), 'errors' => ['ids' => [ctrans('texts.not_authorized')]]], 422);
+        }
 
         $invoices = Invoice::withTrashed()->whereIn('id', $this->transformKeys($ids))->company()->get();
 
-        if (! $invoices) {
+        if ($invoices->count() == 0) {
+            Atomic::del($request->lock_key);
             return response()->json(['message' => 'No Invoices Found']);
+        }
+
+        if ($action == 'convert_to_purchase_order') {
+            Atomic::del($request->lock_key);
+
+            if ($user->cannot('edit', $invoices->first())) {
+                return response()->json(['message' => ctrans('texts.access_denied')], 403);
+            }
+
+            return $this->performAction($invoices->first(), $action);
         }
 
         /*
          * Download Invoice/s
          */
 
-        if ($action == 'download' && $invoices->count() > 1) {
-            $invoices->each(function ($invoice) {
-                if (auth()->user()->cannot('view', $invoice)) {
-                    return response()->json(['message' => 'Insufficient privileges to access invoice '.$invoice->number]);
+        if ($action == 'bulk_download' && $invoices->count() > 1) {
+            $authorized = $invoices->filter(function ($invoice) use ($user) {
+                return $user->can('view', $invoice);
+            });
+
+            if ($authorized->isEmpty()) {
+                Atomic::del($request->lock_key);
+                return response()->json(['message' => ctrans('texts.access_denied')], 403);
+            }
+
+            ZipEntity::dispatch($authorized->pluck('id'), $authorized->first()->company, auth()->user(), Invoice::class);
+            Atomic::del($request->lock_key);
+
+            return response()->json(['message' => ctrans('texts.sent_message')], 200);
+        }
+
+        if ($action == 'download' && $invoices->count() >= 1 && $user->can('view', $invoices->first())) {
+
+            $filename = $invoices->first()->getFileName();
+
+            Atomic::del($request->lock_key);
+
+            return response()->streamDownload(function () use ($invoices) {
+                echo $invoices->first()->service()->getInvoicePdf();
+            }, $filename, ['Content-Type' => 'application/pdf']);
+        }
+
+        if ($action == 'bulk_print') {
+            $invoices = $invoices->filter(function ($invoice) use ($user) {
+                return $user->can('view', $invoice);
+            });
+
+            if ($invoices->isEmpty()) {
+                Atomic::del($request->lock_key);
+                return response()->json(['message' => ctrans('texts.access_denied')], 403);
+            }
+
+            $start = microtime(true);
+
+            try {
+                $merged_pdf = app(BatchPdfService::class)->render(
+                    Invoice::class,
+                        $invoices->pluck('id')->all(),
+                        $user->company()->db,
+                    );
+            } finally {
+                Atomic::del($request->lock_key);
+            }
+
+            return response()->streamDownload(function () use ($merged_pdf) {
+                echo $merged_pdf;
+            }, 'print.pdf', [
+                'Content-Type' => 'application/pdf',
+                'Cache-Control:' => 'no-cache',
+                'Server-Timing' => (string) (microtime(true) - $start),
+            ]);
+        }
+
+        if ($action == 'template') {
+            $invoices = $invoices->filter(function ($invoice) use ($user) {
+                return $user->can('view', $invoice);
+            });
+
+            if ($invoices->isEmpty()) {
+                Atomic::del($request->lock_key);
+                return response()->json(['message' => ctrans('texts.access_denied')], 403);
+            }
+
+            $ids = $invoices->pluck('hashed_id')->toArray();
+            $hash_or_response = $request->boolean('send_email') ? 'email sent' : \Illuminate\Support\Str::uuid();
+
+            TemplateAction::dispatch(
+                $ids,
+                $request->template_id,
+                Invoice::class,
+                $user->id,
+                $user->company(),
+                $user->company()->db,
+                $hash_or_response,
+                $request->boolean('send_email')
+            );
+
+            Atomic::del($request->lock_key);
+
+            return response()->json(['message' => $hash_or_response], 200);
+        }
+
+        if ($action == 'set_payment_link' && $request->has('subscription_id')) {
+
+            $invoices->each(function ($invoice) use ($user, $request) {
+                if ($user->can('edit', $invoice)) {
+                    $invoice->service()->setPaymentLink($request->subscription_id)->save();
                 }
             });
 
-            ZipInvoices::dispatch($invoices, $invoices->first()->company, auth()->user()->email);
+            Atomic::del($request->lock_key);
 
-            return response()->json(['message' => 'Email Sent!'], 200);
+            return $this->listResponse(Invoice::withTrashed()->whereIn('id', $this->transformKeys($ids))->company());
         }
 
+        if (in_array($action, ['email','send_email'])) {
+
+            $invoices->filter(function ($invoice) use ($user) {
+                return $user->can('edit', $invoice);
+            })->each(function ($invoice) use ($user, $request) {
+                $invoice->service()->markSent()->sendEmail(email_type: $request->input('email_type', $invoice->calculateTemplate('invoice')));
+            });
+
+            Atomic::del($request->lock_key);
+
+            return $this->listResponse(Invoice::withTrashed()->whereIn('id', $this->transformKeys($ids))->company());
+
+        }
         /*
          * Send the other actions to the switch
          */
-        $invoices->each(function ($invoice, $key) use ($action) {
-            if (auth()->user()->can('edit', $invoice)) {
+        $invoices->each(function ($invoice, $key) use ($action, $user) {
+            if ($user->can('edit', $invoice)) {
                 $this->performAction($invoice, $action, true);
             }
         });
 
         /* Need to understand which permission are required for the given bulk action ie. view / edit */
+        Atomic::del($request->lock_key);
 
         return $this->listResponse(Invoice::withTrashed()->whereIn('id', $this->transformKeys($ids))->company());
     }
@@ -564,6 +700,7 @@ class InvoiceController extends BaseController
      *        The current range of actions are as follows
      *        - clone_to_invoice
      *        - clone_to_quote
+     *        - convert_to_purchase_order
      *        - history
      *        - delivery_note
      *        - mark_paid
@@ -571,8 +708,7 @@ class InvoiceController extends BaseController
      *        - archive
      *        - delete
      *        - email",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -620,7 +756,7 @@ class InvoiceController extends BaseController
      * @param ActionInvoiceRequest $request
      * @param Invoice $invoice
      * @param $action
-     * @return \App\Http\Controllers\Response|\Illuminate\Http\JsonResponse|Response|mixed|\Symfony\Component\HttpFoundation\StreamedResponse
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response|mixed|\Symfony\Component\HttpFoundation\StreamedResponse
      */
     public function action(ActionInvoiceRequest $request, Invoice $invoice, $action)
     {
@@ -629,13 +765,20 @@ class InvoiceController extends BaseController
 
     private function performAction(Invoice $invoice, $action, $bulk = false)
     {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
         /*If we are using bulk actions, we don't want to return anything */
         switch ($action) {
+            case 'auto_bill':
+
+                AutoBill::dispatch($invoice->id, $invoice->company->db);
+                return $this->itemResponse($invoice);
+
             case 'clone_to_invoice':
                 $invoice = CloneInvoiceFactory::create($invoice, auth()->user()->id);
-
                 return $this->itemResponse($invoice);
-                break;
+
             case 'clone_to_quote':
                 $quote = CloneInvoiceToQuoteFactory::create($invoice, auth()->user()->id);
 
@@ -644,7 +787,15 @@ class InvoiceController extends BaseController
 
                 return $this->itemResponse($quote);
 
-                break;
+            case 'convert_to_purchase_order':
+                $purchase_order = CloneInvoiceToPurchaseOrderFactory::create($invoice, auth()->user()->id);
+                $purchase_order->design_id = $this->decodePrimaryKey($invoice->client->getSetting('purchase_order_design_id'));
+
+                $this->entity_transformer = PurchaseOrderTransformer::class;
+                $this->entity_type = PurchaseOrder::class;
+
+                return $this->itemResponse($purchase_order);
+
             case 'history':
                 // code...
                 break;
@@ -652,92 +803,59 @@ class InvoiceController extends BaseController
                 // code...
                 break;
             case 'mark_paid':
-                if ($invoice->balance < 0 || $invoice->status_id == Invoice::STATUS_PAID || $invoice->is_deleted === true) {
-                    return $this->errorResponse(['message' => 'Invoice cannot be marked as paid'], 400);
+                if ($invoice->status_id == Invoice::STATUS_PAID || $invoice->is_deleted === true) {
+                    return $this->errorResponse(['message' => ctrans('texts.invoice_cannot_be_marked_paid')], 400);
                 }
 
-                $invoice = $invoice->service()->markPaid();
+                $invoice = $invoice->service()->markPaid()->save();
 
                 if (! $bulk) {
                     return $this->itemResponse($invoice);
                 }
                 break;
             case 'mark_sent':
-                $invoice->service()->markSent()->save();
+                $invoice->service()->markSent(true)->save();
 
                 if (! $bulk) {
                     return $this->itemResponse($invoice);
                 }
                 break;
             case 'download':
-                    return response()->streamDownload(function () use ($invoice) {
-                        echo file_get_contents($invoice->pdf_file_path());
-                    }, basename($invoice->pdf_file_path()));
-                    //return response()->download(TempFile::path($invoice->pdf_file_path()), basename($invoice->pdf_file_path()));
-                break;
+
+                return response()->streamDownload(function () use ($invoice) {
+                    echo $invoice->service()->getInvoicePdf();
+                }, $invoice->getFileName(), ['Content-Type' => 'application/pdf']);
+
             case 'restore':
                 $this->invoice_repo->restore($invoice);
 
                 if (! $bulk) {
-                    return $this->listResponse($invoice);
+                    return $this->itemResponse($invoice);
                 }
                 break;
             case 'archive':
                 $this->invoice_repo->archive($invoice);
 
                 if (! $bulk) {
-                    return $this->listResponse($invoice);
+                    return $this->itemResponse($invoice);
                 }
                 break;
             case 'delete':
-                //need to make sure the invoice is cancelled first!!
-                $invoice->service()->handleCancellation()->save();
-
                 $this->invoice_repo->delete($invoice);
 
                 if (! $bulk) {
-                    return $this->listResponse($invoice);
+                    return $this->itemResponse($invoice);
                 }
                 break;
             case 'cancel':
-                $invoice = $invoice->service()->handleCancellation()->save();
-
+                $invoice = $invoice->service()->handleCancellation(request()->input('reason'))->save();
                 if (! $bulk) {
                     $this->itemResponse($invoice);
-                }
-                break;
-            case 'reverse':
-                $invoice = $invoice->service()->handleReversal()->save();
-
-                if (! $bulk) {
-                    $this->itemResponse($invoice);
-                }
-                break;
-            case 'email':
-                //check query parameter for email_type and set the template else use calculateTemplate
-                if (request()->has('email_type') && property_exists($invoice->company->settings, request()->input('email_type'))) {
-                    $this->reminder_template = $invoice->client->getSetting(request()->input('email_type'));
-                } else {
-                    $this->reminder_template = $invoice->calculateTemplate('invoice');
-                }
-
-                //touch reminder1,2,3_sent + last_sent here if the email is a reminder.
-
-                $invoice->service()->touchReminder($this->reminder_template)->save();
-
-                $invoice->invitations->load('contact.client.country', 'invoice.client.country', 'invoice.company')->each(function ($invitation) use ($invoice) {
-                    info("firing email");
-                    EmailEntity::dispatch($invitation, $invoice->company, $this->reminder_template);
-                });
-
-                if (! $bulk) {
-                    return response()->json(['message' => 'email sent'], 200);
                 }
                 break;
 
             default:
-                return response()->json(['message' => "The requested action `{$action}` is not available."], 400);
-                break;
+                return response()->json(['message' => ctrans('texts.action_unavailable', ['action' => $action])], 400);
         }
     }
 
@@ -748,8 +866,7 @@ class InvoiceController extends BaseController
      *      tags={"invoices"},
      *      summary="Download a specific invoice by invitation key",
      *      description="Downloads a specific invoice",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -783,17 +900,103 @@ class InvoiceController extends BaseController
      *       ),
      *     )
      * @param $invitation_key
-     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse | \Illuminate\Http\JsonResponse | \Illuminate\Http\Response
      */
     public function downloadPdf($invitation_key)
     {
+
         $invitation = $this->invoice_repo->getInvitationByKey($invitation_key);
+
+        if (! $invitation) {
+            return response()->json(['message' => 'no record found'], 400);
+        }
+
+        $invoice = $invitation->invoice;
+
+        App::setLocale($invitation->contact->preferredLocale());
+
+        $file_name = $invoice->numberFormatter() . '.pdf';
+
+        $file = (new \App\Jobs\Entity\CreateRawPdf($invitation))->handle();
+
+        $headers = ['Content-Type' => 'application/pdf'];
+
+        if (request()->input('inline') == 'true') {
+            $headers = array_merge($headers, ['Content-Disposition' => 'inline']);
+        }
+
+        return response()->streamDownload(function () use ($file) {
+            echo $file;
+        }, $file_name, $headers);
+
+    }
+
+    /**
+     * @OA\Get(
+     *      path="/api/v1/invoice/{invitation_key}/download_e_invoice",
+     *      operationId="downloadXInvoice",
+     *      tags={"invoices"},
+     *      summary="Download a specific x-invoice by invitation key",
+     *      description="Downloads a specific x-invoice",
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
+     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
+     *      @OA\Parameter(ref="#/components/parameters/include"),
+     *      @OA\Parameter(
+     *          name="invitation_key",
+     *          in="path",
+     *          description="The Invoice Invitation Key",
+     *          example="D2J234DFA",
+     *          required=true,
+     *          @OA\Schema(
+     *              type="string",
+     *              format="string",
+     *          ),
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Returns the x-invoice pdf",
+     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
+     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
+     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
+     *       ),
+     *       @OA\Response(
+     *          response=422,
+     *          description="Validation error",
+     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
+     *
+     *       ),
+     *       @OA\Response(
+     *           response="default",
+     *           description="Unexpected Error",
+     *           @OA\JsonContent(ref="#/components/schemas/Error"),
+     *       ),
+     *     )
+     * @param $invitation_key
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse | \Illuminate\Http\JsonResponse | \Illuminate\Http\Response
+     */
+    public function downloadEInvoice($invitation_key)
+    {
+        $invitation = $this->invoice_repo->getInvitationByKey($invitation_key);
+
+        if (! $invitation) {
+            return response()->json(['message' => 'no record found'], 400);
+        }
+
         $contact = $invitation->contact;
         $invoice = $invitation->invoice;
 
-        $file_path = $invoice->service()->getInvoicePdf($contact);
+        $file = $invoice->service()->getEInvoice($contact);
+        $file_name = $invoice->getFileName("xml");
 
-        return response()->download($file_path, basename($file_path));
+        $headers = ['Content-Type' => 'application/xml'];
+
+        if (request()->input('inline') == 'true') {
+            $headers = array_merge($headers, ['Content-Disposition' => 'inline']);
+        }
+
+        return response()->streamDownload(function () use ($file) {
+            echo $file;
+        }, $file_name, $headers);
     }
 
     /**
@@ -803,8 +1006,7 @@ class InvoiceController extends BaseController
      *      tags={"invoices"},
      *      summary="Download a specific invoice delivery notes",
      *      description="Downloads a specific invoice delivery notes",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -838,14 +1040,139 @@ class InvoiceController extends BaseController
      *       ),
      *     )
      * @param $invoice
-     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse | \Illuminate\Http\JsonResponse | \Illuminate\Http\Response
      */
     public function deliveryNote(ShowInvoiceRequest $request, Invoice $invoice)
     {
-        $file_path = $invoice->service()->getInvoiceDeliveryNote($invoice, $invoice->invitations->first()->contact);
-        
-        $file = base_path("storage/app/public/{$file_path}");
 
-        return response()->download($file, basename($file));
+        return response()->streamDownload(function () use ($invoice) {
+            echo $invoice->service()->getInvoiceDeliveryNote($invoice, $invoice->invitations->first()->contact);
+        }, $invoice->getDeliveryNoteName(), ['Content-Type' => 'application/pdf']);
+
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param UploadInvoiceRequest $request
+     * @param Invoice $invoice
+     * @return Response| \Illuminate\Http\JsonResponse
+     *
+     *
+     *
+     * @OA\Put(
+     *      path="/api/v1/invoices/{id}/upload",
+     *      operationId="uploadInvoice",
+     *      tags={"invoices"},
+     *      summary="Uploads a document to a invoice",
+     *      description="Handles the uploading of a document to a invoice",
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
+     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
+     *      @OA\Parameter(ref="#/components/parameters/include"),
+     *      @OA\Parameter(
+     *          name="id",
+     *          in="path",
+     *          description="The Invoice Hashed ID",
+     *          example="D2J234DFA",
+     *          required=true,
+     *          @OA\Schema(
+     *              type="string",
+     *              format="string",
+     *          ),
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Returns the Invoice object",
+     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
+     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
+     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
+     *          @OA\JsonContent(ref="#/components/schemas/Invoice"),
+     *       ),
+     *       @OA\Response(
+     *          response=422,
+     *          description="Validation error",
+     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
+     *
+     *       ),
+     *       @OA\Response(
+     *           response="default",
+     *           description="Unexpected Error",
+     *           @OA\JsonContent(ref="#/components/schemas/Error"),
+     *       ),
+     *     )
+     */
+    public function upload(UploadInvoiceRequest $request, Invoice $invoice)
+    {
+
+        if (! $this->checkFeature(Account::FEATURE_DOCUMENTS)) {
+            return $this->featureFailure();
+        }
+
+        if ($request->has('documents')) {
+            $this->saveDocuments($request->file('documents'), $invoice, $request->has('is_public') ? $request->boolean('is_public') : null);
+        }
+
+        if ($request->has('file')) {
+            $this->saveDocuments($request->file('file'), $invoice, $request->has('is_public') ? $request->boolean('is_public') : null);
+        }
+
+        return $this->itemResponse($invoice->fresh());
+    }
+    
+    /**
+     * update_reminders
+     *
+     * @param  UpdateReminderRequest $request
+     */
+    public function update_reminders(UpdateReminderRequest $request)
+    {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        UpdateReminders::dispatch($user->company());
+
+        return response()->json(['message' => 'Updating reminders'], 200);
+    }
+    
+    /**
+     * paymentSchedule
+     *
+     * @param  PaymentScheduleRequest $request
+     * @param  Invoice $invoice
+     */
+    public function paymentSchedule(PaymentScheduleRequest $request, Invoice $invoice)
+    {
+        $repo = new SchedulerRepository();
+
+        $repo->save($request->all(), SchedulerFactory::create($invoice->company_id, auth()->user()->id));
+
+        return $this->itemResponse($invoice->fresh());
+
+    }
+    
+    /**
+     * deletePaymentSchedule
+     *
+     * @param  DeletePaymentScheduleRequest $request
+     * @param  Invoice $invoice
+     */
+    public function deletePaymentSchedule(DeletePaymentScheduleRequest $request,Invoice $invoice)
+    {
+        $repo = new SchedulerRepository();
+
+        $scheduler = Scheduler::where('company_id', $invoice->company_id)
+                                ->where('template', 'payment_schedule')
+                                ->where('parameters->invoice_id', $invoice->hashed_id)
+                                ->first();
+
+        if ($scheduler) {
+            $scheduler->forceDelete();
+        }
+
+        $invoice->partial = 0;
+        $invoice->partial_due_date = null;
+        $invoice->save();
+
+        return $this->itemResponse($invoice->fresh());
     }
 }

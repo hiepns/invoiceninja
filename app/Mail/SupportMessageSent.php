@@ -1,25 +1,34 @@
 <?php
-
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
 namespace App\Mail;
 
 use App\Utils\Ninja;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Carbon;
 use LimitIterator;
 use SplFileObject;
 
 class SupportMessageSent extends Mailable
 {
-    use Queueable, SerializesModels;
+    //   use Queueable, SerializesModels;
 
-    public $message;
+    public $data;
 
     public $send_logs;
 
-    public function __construct($message, $send_logs)
+    public function __construct(array $data, $send_logs)
     {
-        $this->message = $message;
+        $this->data = $data;
         $this->send_logs = $send_logs;
     }
 
@@ -30,7 +39,8 @@ class SupportMessageSent extends Mailable
      */
     public function build()
     {
-        $system_info = null;
+        $system_info = request()->has('version') ? 'Version: ' . request()->input('version') : 'Version: No Version Supplied.';
+
         $log_lines = [];
 
         /*
@@ -45,26 +55,51 @@ class SupportMessageSent extends Mailable
 
             $log_file->seek(PHP_INT_MAX);
             $last_line = $log_file->key();
-            $lines = new LimitIterator($log_file, $last_line - 10, $last_line);
 
+            $lines = new LimitIterator($log_file, max(0, $last_line - 100), $last_line);
             $log_lines = iterator_to_array($lines);
         }
 
         $account = auth()->user()->account;
 
-        $plan = $account->plan ?: 'Self Hosted';
+        $priority = '';
+        $plan = $account->plan ?: 'customer support';
+        $plan = ucfirst($plan);
+
+        if (strlen($account->plan) > 1) {
+            $priority = '[PRIORITY] ';
+        }
 
         $company = auth()->user()->company();
         $user = auth()->user();
+        $db = str_replace('db-ninja-', '', $company->db);
+        $is_large = $company->is_large ? 'L' : 'S';
+        $platform = array_key_exists('platform', $this->data) ? $this->data['platform'] : 'U';
+        $migrated = ctype_lower(preg_replace('/[0-9]+/', '', $company->company_key)) ? 'M' : '';
+        $trial = $account->isTrial() ? 'T' : '';
+        $plan = str_replace('_', ' ', $plan);
 
-        $subject = "Customer MSG {$user->present()->name} - [{$plan} - DB:{$company->db}]";
+        $plan_status = '';
 
-        return $this->from(config('mail.from.address'), config('mail.from.name')) //todo this needs to be fixed to handle the hosted version
-            ->subject($subject)
-            ->markdown('email.support.message', [
-                'message' => $this->message,
-                'system_info' => $system_info,
-                'laravel_log' => $log_lines,
-            ]);
+        if ($account->plan_expires && Carbon::parse($account->plan_expires)->lt(now())) {
+            $plan_status = 'Plan Expired :: ';
+        }
+
+        if (Ninja::isHosted()) {
+            $subject = "{$priority}Hosted-{$db}-{$is_large}{$platform}{$migrated}{$trial} :: {$plan} :: {$plan_status} " . date('M jS, g:ia');
+        } else {
+            $subject = "{$priority}Self Hosted :: {$plan} :: {$is_large}{$platform}{$migrated} :: " . date('M jS, g:ia');
+        }
+
+        return $this->from(config('mail.from.address'), $user->present()->name())
+                ->replyTo($user->email, $user->present()->name())
+                ->subject($subject)
+                ->view('email.support.message', [
+                    'support_message' => nl2br($this->data['message']),
+                    'system_info' => $system_info,
+                    'laravel_log' => $log_lines,
+                    'logo' => $company->present()->logo(),
+                    'settings' => $company->settings,
+                ]);
     }
 }

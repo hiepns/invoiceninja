@@ -5,103 +5,150 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\PaymentDrivers\Stripe;
 
-use App\Events\Payment\PaymentWasCreated;
+use App\Exceptions\PaymentFailed;
 use App\Jobs\Util\SystemLogger;
 use App\Models\GatewayType;
 use App\Models\Payment;
 use App\Models\PaymentType;
 use App\Models\SystemLog;
+use App\PaymentDrivers\Common\LivewireMethodInterface;
 use App\PaymentDrivers\StripePaymentDriver;
-use App\Utils\Ninja;
 
-class SOFORT
+class SOFORT implements LivewireMethodInterface
 {
     /** @var StripePaymentDriver */
-    public $stripe;
+    public StripePaymentDriver $stripe;
 
     public function __construct(StripePaymentDriver $stripe)
     {
         $this->stripe = $stripe;
     }
 
+    public function authorizeView($data)
+    {
+        return render('gateways.stripe.sofort.authorize', $data);
+    }
+
     public function paymentView(array $data)
     {
-        $data['gateway'] = $this->stripe;
-        $data['return_url'] = $this->buildReturnUrl($data);
-        $data['stripe_amount'] = $this->stripe->convertToStripeAmount($data['amount_with_fee'], $this->stripe->client->currency()->precision);
-        $data['client'] = $this->stripe->client;
-        $data['country'] = $this->stripe->client->country->iso_3166_2;
+        $data = $this->paymentData($data);
+        $data = $this->paymentData($data);
 
         return render('gateways.stripe.sofort.pay', $data);
     }
 
-    private function buildReturnUrl($data): string
+    private function buildReturnUrl(): string
     {
         return route('client.payments.response', [
             'company_gateway_id' => $this->stripe->company_gateway->id,
-            'gateway_type_id' => GatewayType::SOFORT,
-            'hashed_ids' => implode(',', $data['hashed_ids']),
-            'amount' => $data['amount'],
-            'fee' => $data['fee'],
+            'payment_hash' => $this->stripe->payment_hash->hash,
+            'payment_method_id' => GatewayType::SOFORT,
         ]);
     }
 
     public function paymentResponse($request)
     {
-        $state = array_merge($request->all(), []);
-        $amount = $state['amount'] + $state['fee'];
-        $state['amount'] = $this->stripe->convertToStripeAmount($amount, $this->stripe->client->currency()->precision);
+        $this->stripe->payment_hash->data = array_merge((array) $this->stripe->payment_hash->data, $request->all());
+        $this->stripe->payment_hash->save();
 
-        if ($request->redirect_status == 'succeeded') {
-            return $this->processSuccessfulPayment($state);
+        if (in_array($request->redirect_status, ['succeeded','pending'])) {
+            return $this->processSuccessfulPayment($request->payment_intent);
         }
 
-        return $this->processUnsuccessfulPayment($state);
+        return $this->processUnsuccessfulPayment();
     }
 
-    public function processSuccessfulPayment($state)
+    public function processSuccessfulPayment(string $payment_intent)
     {
-        $state['charge_id'] = $state['source'];
+        /* @todo: https://github.com/invoiceninja/invoiceninja/pull/3789/files#r436175798 */
 
         $this->stripe->init();
 
-        $state['payment_type'] = PaymentType::SOFORT;
-
         $data = [
-            'payment_method' => $state['charge_id'],
-            'payment_type' => $state['payment_type'],
-            'amount' => $state['amount'],
+            'payment_method' => $payment_intent,
+            'payment_type' => PaymentType::SOFORT,
+            'amount' => $this->stripe->convertFromStripeAmount($this->stripe->payment_hash->data->stripe_amount, $this->stripe->client->currency()->precision, $this->stripe->client->currency()),
+            'transaction_reference' => $payment_intent,
             'gateway_type_id' => GatewayType::SOFORT,
         ];
 
         $payment = $this->stripe->createPayment($data, Payment::STATUS_PENDING);
 
-        /* @todo: https://github.com/invoiceninja/invoiceninja/pull/3789/files#r436175798 */
-        if (isset($state['hashed_ids'])) {
-            $this->stripe->attachInvoices($payment, $state['hashed_ids']);
-        }
+        SystemLogger::dispatch(
+            ['response' => $this->stripe->payment_hash->data, 'data' => $data],
+            SystemLog::CATEGORY_GATEWAY_RESPONSE,
+            SystemLog::EVENT_GATEWAY_SUCCESS,
+            SystemLog::TYPE_STRIPE,
+            $this->stripe->client,
+            $this->stripe->client->company,
+        );
 
-        event(new PaymentWasCreated($payment, $payment->company, Ninja::eventVars()));
-
-        $logger_message = [
-            'server_response' => $state,
-            'data' => $data,
-        ];
-
-        SystemLogger::dispatch($logger_message, SystemLog::CATEGORY_GATEWAY_RESPONSE, SystemLog::EVENT_GATEWAY_SUCCESS, SystemLog::TYPE_STRIPE, $this->stripe->client);
-
-        return redirect()->route('client.payments.show', ['payment' => $this->stripe->encodePrimaryKey($payment->id)]);
+        return redirect()->route('client.payments.show', ['payment' => $payment->hashed_id]);
     }
 
-    public function processUnsuccessfulPayment($state)
+    public function processUnsuccessfulPayment()
     {
-        return redirect()->route('client.invoices.index')->with('warning', ctrans('texts.status_cancelled'));
+        $server_response = $this->stripe->payment_hash->data;
+
+        $this->stripe->sendFailureMail('There was an undefined error processing this payment.');
+
+        $message = [
+            'server_response' => $server_response,
+            'data' => $this->stripe->payment_hash->data,
+        ];
+
+        SystemLogger::dispatch(
+            $message,
+            SystemLog::CATEGORY_GATEWAY_RESPONSE,
+            SystemLog::EVENT_GATEWAY_FAILURE,
+            SystemLog::TYPE_STRIPE,
+            $this->stripe->client,
+            $this->stripe->client->company,
+        );
+
+        throw new PaymentFailed('Failed to process the payment.', 500);
+    }
+
+    public function paymentData(array $data): array
+    {
+        $this->stripe->init();
+
+        $data['gateway'] = $this->stripe;
+        $data['return_url'] = $this->buildReturnUrl();
+        $data['stripe_amount'] = $this->stripe->convertToStripeAmount($data['total']['amount_with_fee'], $this->stripe->client->currency()->precision, $this->stripe->client->currency());
+        $data['client'] = $this->stripe->client;
+        $data['customer'] = $this->stripe->findOrCreateCustomer()->id;
+        $data['country'] = $this->stripe->client->country->iso_3166_2;
+
+        $intent = \Stripe\PaymentIntent::create([
+            'amount' => $data['stripe_amount'],
+            'currency' => 'eur',
+            'payment_method_types' => ['sofort'],
+            'customer' => $this->stripe->findOrCreateCustomer(),
+            'description' => $this->stripe->getDescription(false),
+            'metadata' => [
+                'payment_hash' => $this->stripe->payment_hash->hash,
+                'gateway_type_id' => GatewayType::SOFORT,
+            ],
+        ], array_merge($this->stripe->stripe_connect_auth, ['idempotency_key' => uniqid("st", true)]));
+
+        $data['pi_client_secret'] = $intent->client_secret;
+
+        $this->stripe->payment_hash->data = array_merge((array) $this->stripe->payment_hash->data, ['stripe_amount' => $data['stripe_amount']]);
+        $this->stripe->payment_hash->save();
+
+        return $data;
+    }
+
+    public function livewirePaymentView(array $data): string
+    {
+        return 'gateways.stripe.sofort.pay_livewire';
     }
 }

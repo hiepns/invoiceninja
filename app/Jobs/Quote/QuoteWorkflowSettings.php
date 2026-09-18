@@ -5,9 +5,9 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Jobs\Quote;
@@ -23,10 +23,15 @@ use Illuminate\Queue\SerializesModels;
 
 class QuoteWorkflowSettings implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     public $quote;
+
     public $client;
+
     public $base_repository;
 
     /**
@@ -35,7 +40,7 @@ class QuoteWorkflowSettings implements ShouldQueue
      * @param Quote $quote
      * @param Client|null $client
      */
-    public function __construct(Quote $quote, Client $client = null)
+    public function __construct(Quote $quote, ?Client $client = null)
     {
         $this->quote = $quote;
         $this->client = $client ?? $quote->client;
@@ -51,12 +56,8 @@ class QuoteWorkflowSettings implements ShouldQueue
     {
         if ($this->client->getSetting('auto_email_quote')) {
             $this->quote->invitations->each(function ($invitation, $key) {
-                $this->quote->service()->sendEmail($invitation->contact);
+                $this->quote->service()->sendEmail($invitation->contact, 'quote');
             });
-        }
-
-        if ($this->client->getSetting('auto_archive_quote')) {
-            $this->base_repository->archive($this->quote);
         }
     }
 }

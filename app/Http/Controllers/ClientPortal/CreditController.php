@@ -1,29 +1,56 @@
 <?php
 
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
+
 namespace App\Http\Controllers\ClientPortal;
 
+use App\Events\Credit\CreditWasViewed;
+use App\Events\Misc\InvitationWasViewed;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\ClientPortal\ShowCreditRequest;
+use App\Http\Requests\ClientPortal\Credits\ShowCreditRequest;
+use App\Http\Requests\ClientPortal\Credits\ShowCreditsRequest;
 use App\Models\Credit;
-use Illuminate\Contracts\View\Factory;
-use Illuminate\View\View;
+use App\Utils\Ninja;
 
 class CreditController extends Controller
 {
-    /**
-     * Display listing of client credits.
-     *
-     * @return Factory|View
-     */
-    public function index()
+    public function index(ShowCreditsRequest $request)
     {
         return $this->render('credits.index');
     }
 
     public function show(ShowCreditRequest $request, Credit $credit)
     {
-        return $this->render('credits.show', [
+        set_time_limit(0);
+
+        /** @var \App\Models\CreditInvitation|null $invitation */
+        $invitation = $credit->invitations()->where('client_contact_id', auth()->guard('contact')->user()->id)->first();
+
+        $data = [
             'credit' => $credit,
-        ]);
+            '_key' => $invitation ? $invitation->key : false,
+            'invitation' => $invitation,
+        ];
+
+        if ($invitation && auth()->guard('contact')->check() && ! request()->has('silent') && ! $invitation->viewed_date) {
+            $invitation->markViewed();
+
+            event(new InvitationWasViewed($credit, $invitation, $credit->company, Ninja::eventVars()));
+            event(new CreditWasViewed($invitation, $invitation->company, Ninja::eventVars()));
+        }
+
+        if ($request->query('mode') === 'fullscreen') {
+            return render('credits.show-fullscreen', $data);
+        }
+
+        return $this->render('credits.show', $data);
     }
 }

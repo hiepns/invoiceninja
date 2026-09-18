@@ -4,10 +4,11 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Database\Factories;
 
 use App\Models\Payment;
@@ -15,13 +16,6 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 
 class PaymentFactory extends Factory
 {
-    /**
-     * The name of the factory's corresponding model.
-     *
-     * @var string
-     */
-    protected $model = Payment::class;
-
     /**
      * Define the model's default state.
      *
@@ -36,6 +30,7 @@ class PaymentFactory extends Factory
             'transaction_reference' => $this->faker->text(10),
             'type_id' => Payment::TYPE_CREDIT_CARD,
             'status_id' => Payment::STATUS_COMPLETED,
+            'currency_id' => 1,
         ];
     }
 }

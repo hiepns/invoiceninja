@@ -1,9 +1,25 @@
 <?php
 
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
+
 namespace App\Http\Requests\ClientPortal;
 
+use App\Services\ClientPortal\CustomFieldService;
+use App\Utils\Ninja;
+use App\Models\Account;
 use App\Models\Company;
+use App\Libraries\MultiDB;
+use Illuminate\Validation\Rule;
 use Illuminate\Foundation\Http\FormRequest;
+use App\Http\ValidationRules\Turnstile\Turnstile;
 
 class RegisterRequest extends FormRequest
 {
@@ -22,27 +38,89 @@ class RegisterRequest extends FormRequest
      *
      * @return array
      */
-    public function rules()
+    public function rules(): array
     {
-        return [
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email:rfc,dns', 'max:255', 'unique:client_contacts'],
-            'password' => ['required', 'string', 'min:6', 'confirmed'],
-        ];
+        $rules = [];
+        $company = $this->company();
+
+        $service = app(CustomFieldService::class);
+        $customRules = $service->buildRules($service->buildFields($company));
+
+        $customKeys = ['custom_value1', 'custom_value2', 'custom_value3', 'custom_value4'];
+
+        foreach ($company->client_registration_fields as $field) {
+            if ($field['visible'] ?? true) {
+                if (in_array($field['key'], $customKeys)) {
+                    $rules[$field['key']] = $customRules[$field['key']]
+                        ?? ($field['required'] ? ['bail', 'required'] : ['sometimes']);
+                } else {
+                    $rules[$field['key']] = $field['required'] ? ['bail', 'required'] : ['sometimes'];
+                }
+            }
+        }
+
+        foreach (array_keys($rules) as $field) {
+            if ($field === 'email') {
+                $rules[$field] = array_merge($rules[$field], ['email:rfc,dns', 'max:191', Rule::unique('client_contacts')->where('company_id', $company->id)]);
+            }
+
+            if ($field === 'current_password') {
+                $rules[$field] = array_merge($rules[$field], ['string', 'min:6', 'confirmed']);
+            }
+        }
+
+        if ($company->settings->client_portal_terms || $company->settings->client_portal_privacy_policy) {
+            $rules['terms'] = ['required'];
+        }
+
+        $rules['cf-turnstile-response'] = ['sometimes', new Turnstile()];
+
+        return $rules;
     }
 
     public function company()
     {
-        if ($this->subdomain) {
-            return Company::where('subdomain', $this->subdomain)->firstOrFail();
+        //this should be all we need, the rest SHOULD be redundant because of our Middleware
+        if ($this->key) {
+            return Company::query()->where('company_key', $this->key)->first();
         }
 
         if ($this->company_key) {
-            return Company::where('company_key', $this->company_key)->firstOrFail();
+            return Company::query()->where('company_key', $this->company_key)->firstOrFail();
         }
 
-        abort(404);
+        if (! $this->route()->parameter('company_key') && Ninja::isSelfHost()) {
+            $company = Account::query()->first()->default_company;
+
+            if (! $company->client_can_register) {
+                abort(403, 'This page is restricted');
+            }
+
+            return $company;
+        }
+
+        if (Ninja::isHosted()) {
+            $subdomain = explode('.', $this->getHost())[0];
+
+            $query = [
+                'subdomain' => $subdomain,
+                'portal_mode' => 'subdomain',
+            ];
+
+            if ($company = MultiDB::findAndSetDbByDomain($query)) {
+                return $company;
+            }
+
+            $query = [
+                'portal_domain' => $this->getSchemeAndHttpHost(),
+                'portal_mode' => 'domain',
+            ];
+
+            if ($company = MultiDB::findAndSetDbByDomain($query)) {
+                return $company;
+            }
+        }
+
+        abort(400, 'Register request not found.');
     }
 }

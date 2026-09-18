@@ -1,31 +1,32 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Providers;
 
+use App\Utils\Ninja;
+use App\Models\Scheduler;
+use Illuminate\Http\Request;
 use App\Utils\Traits\MakesHash;
-use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Support\Facades\RateLimiter;
+use App\Http\Middleware\ThrottleRequestsWithPredis;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Database\Eloquent\ModelNotFoundException as ModelNotFoundException;
+use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 
 class RouteServiceProvider extends ServiceProvider
 {
     use MakesHash;
-    /**
-     * This namespace is applied to your controller routes.
-     *
-     * In addition, it is set as the URL generator's root namespace.
-     *
-     * @var string
-     */
-    protected $namespace = 'App\Http\Controllers';
 
     /**
      * Define your route model bindings, pattern filters, etc.
@@ -34,8 +35,185 @@ class RouteServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        //
         parent::boot();
+
+        if (Ninja::isHosted() && !config('ninja.testvars.travis')) {
+            app('router')->aliasMiddleware('throttle', ThrottleRequestsWithPredis::class);
+        } else {
+            app('router')->aliasMiddleware('throttle', ThrottleRequests::class);
+        }
+
+        Route::bind('task_scheduler', function ($value) {
+            if (is_numeric($value)) {
+                throw new ModelNotFoundException("Record with value {$value} not found");
+            }
+
+            return Scheduler::query()
+                ->withTrashed()
+                ->company()
+                ->where('id', $this->decodePrimaryKey($value))->firstOrFail();
+        });
+
+        RateLimiter::for('login', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            } else {
+                return [
+                    Limit::perMinute(4)->by($request->ip()),
+                    Limit::perMinute(10)->by($request->email ?? '')
+                ];
+            }
+        });
+
+        RateLimiter::for('precheck', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            } else {
+                return [
+                    Limit::perMinute(4)->by($request->ip()),
+                    Limit::perMinute(10)->by($request->email ?? '')
+                ];
+            }
+        });
+
+        RateLimiter::for('api', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            } else {
+
+                $limits = [
+                    Limit::perMinute(1000)->by($request->ip()),
+                ];
+
+                if ($token = $request->header('X-API-TOKEN')) {
+                    $limits[] = Limit::perMinute(1000)->by(sha1($token));
+                }
+
+                return $limits;
+
+            }
+        });
+
+        RateLimiter::for('refresh', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            } else {
+                
+                $limits = [
+                    Limit::perMinute(200)->by($request->ip()),
+                ];
+
+                if ($token = $request->header('X-API-TOKEN')) {
+                    $limits[] = Limit::perMinute(200)->by(sha1($token));
+                }
+                
+                return $limits;
+
+            }
+        });
+
+        RateLimiter::for('404', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            } else {
+                return Limit::perMinute(10)->by($request->ip());
+            }
+        });
+
+        RateLimiter::for('daily-verify', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            }
+
+            $identity = $request->user()?->email
+                ?? $request->input('email')
+                ?? $request->ip();
+
+            return [
+                Limit::perDay(12)->by($request->ip()),
+                Limit::perDay(12)->by($identity),
+            ];
+        });
+
+        RateLimiter::for('honeypot', function (Request $request) {
+            return Limit::perMinute(2)->by($request->ip());
+        });
+
+        RateLimiter::for('portal', function (Request $request) {
+            return Limit::perMinute(15)->by($request->ip());
+        });
+
+        RateLimiter::for('portal-login', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            }
+
+            return [
+                Limit::perMinute(4)->by($request->ip()),
+                Limit::perMinute(10)->by($request->input('email') ?? ''),
+            ];
+        });
+
+        RateLimiter::for('portal-auth', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            }
+
+            $limits = [
+                Limit::perMinute(15)->by($request->ip()),
+            ];
+
+            if ($email = $request->input('email')) {
+                $limits[] = Limit::perMinute(6)->by($email);
+            }
+
+            return $limits;
+        });
+
+        RateLimiter::for('contact-login', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            }
+
+            return [
+                Limit::perMinute(4)->by($request->ip()),
+                Limit::perMinute(10)->by($request->input('email') ?? ''),
+            ];
+        });
+
+        RateLimiter::for('password-reset', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            }
+
+            return [
+                Limit::perMinute(4)->by($request->ip()),
+                Limit::perMinute(6)->by($request->input('email') ?? ''),
+            ];
+        });
+
+        RateLimiter::for('signup', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            }
+
+            return [
+                Limit::perMinute(3)->by($request->ip()),
+                Limit::perHour(10)->by($request->ip()),
+            ];
+        });
+
+        RateLimiter::for('contact-register', function (Request $request) {
+            if (Ninja::isSelfHost()) {
+                return Limit::none();
+            }
+
+            return [
+                Limit::perMinute(5)->by($request->ip()),
+                Limit::perMinute(5)->by($request->input('email') ?? ''),
+            ];
+        });
+
     }
 
     /**
@@ -50,6 +228,8 @@ class RouteServiceProvider extends ServiceProvider
         $this->mapWebRoutes();
 
         $this->mapContactApiRoutes();
+
+        $this->mapVendorsApiRoutes();
 
         $this->mapClientApiRoutes();
 
@@ -66,7 +246,6 @@ class RouteServiceProvider extends ServiceProvider
     protected function mapWebRoutes()
     {
         Route::middleware('web')
-             ->namespace($this->namespace)
              ->group(base_path('routes/web.php'));
     }
 
@@ -81,7 +260,6 @@ class RouteServiceProvider extends ServiceProvider
     {
         Route::prefix('')
              ->middleware('api')
-             ->namespace($this->namespace)
              ->group(base_path('routes/api.php'));
     }
 
@@ -96,7 +274,6 @@ class RouteServiceProvider extends ServiceProvider
     {
         Route::prefix('')
              ->middleware('contact')
-             ->namespace($this->namespace)
              ->group(base_path('routes/contact.php'));
     }
 
@@ -111,7 +288,6 @@ class RouteServiceProvider extends ServiceProvider
     {
         Route::prefix('')
              ->middleware('client')
-             ->namespace($this->namespace)
              ->group(base_path('routes/client.php'));
     }
 
@@ -119,7 +295,13 @@ class RouteServiceProvider extends ServiceProvider
     {
         Route::prefix('')
              ->middleware('shop')
-             ->namespace($this->namespace)
              ->group(base_path('routes/shop.php'));
+    }
+
+    protected function mapVendorsApiRoutes()
+    {
+        Route::prefix('')
+            ->middleware('client')
+            ->group(base_path('routes/vendor.php'));
     }
 }

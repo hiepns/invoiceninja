@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Factory;
@@ -15,7 +16,7 @@ use App\Models\Quote;
 
 class QuoteFactory
 {
-    public static function create(int $company_id, int $user_id) :Quote
+    public static function create(int $company_id, int $user_id): Quote
     {
         $quote = new Quote();
         $quote->status_id = Quote::STATUS_DRAFT;
@@ -27,7 +28,7 @@ class QuoteFactory
         $quote->terms = '';
         $quote->public_notes = '';
         $quote->private_notes = '';
-        $quote->date = null;
+        $quote->date = now()->format('Y-m-d');
         $quote->due_date = null;
         $quote->partial_due_date = null;
         $quote->is_deleted = false;
@@ -45,6 +46,8 @@ class QuoteFactory
         $quote->partial = 0;
         $quote->user_id = $user_id;
         $quote->company_id = $company_id;
+        $quote->paid_to_date = 0;
+        $quote->exchange_rate = 1;
 
         return $quote;
     }

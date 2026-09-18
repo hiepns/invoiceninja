@@ -4,24 +4,17 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Database\Factories;
 
-use App\Models\Expense;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class ExpenseFactory extends Factory
 {
-    /**
-     * The name of the factory's corresponding model.
-     *
-     * @var string
-     */
-    protected $model = Expense::class;
-
     /**
      * Define the model's default state.
      *
@@ -42,6 +35,7 @@ class ExpenseFactory extends Factory
             'private_notes' => $this->faker->text(50),
             'transaction_reference' => $this->faker->text(5),
             'invoice_id' => null,
+            'uses_inclusive_taxes' => false,
         ];
     }
 }

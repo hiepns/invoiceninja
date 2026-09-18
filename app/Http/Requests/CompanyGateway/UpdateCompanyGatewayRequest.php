@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\CompanyGateway;
@@ -27,25 +28,27 @@ class UpdateCompanyGatewayRequest extends Request
      */
     public function authorize()
     {
-        return auth()->user()->isAdmin();
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return $user->can('edit', $this->company_gateway) && $user->isAdmin();
     }
 
     public function rules()
     {
         $rules = [
-            'fees_and_limits' => new ValidCompanyGatewayFeesAndLimitsRule(),
+            'fees_and_limits' => ['bail', 'sometimes', 'nullable', 'array', new ValidCompanyGatewayFeesAndLimitsRule()],
         ];
 
         return $rules;
     }
 
-    protected function prepareForValidation()
+    public function prepareForValidation()
     {
         $input = $this->all();
-
         /*Force gateway properties */
         if (isset($input['config']) && is_object(json_decode($input['config'])) && array_key_exists('gateway_key', $input)) {
-            $gateway = Gateway::where('key', $input['gateway_key'])->first();
+            $gateway = Gateway::query()->where('key', $input['gateway_key'])->first();
             $default_gateway_fields = json_decode($gateway->fields);
 
             foreach (json_decode($input['config']) as $key => $value) {
@@ -55,10 +58,15 @@ class UpdateCompanyGatewayRequest extends Request
             $input['config'] = json_encode($default_gateway_fields);
         }
 
-        $input['config'] = encrypt($input['config']);
 
-        if (isset($input['fees_and_limits'])) {
+        $input['config'] = encrypt($input['config'] ?? '');
+
+        if (isset($input['fees_and_limits']) && is_array($input['fees_and_limits'])) {
             $input['fees_and_limits'] = $this->cleanFeesAndLimits($input['fees_and_limits']);
+        }
+
+        if (isset($input['token_billing']) && $input['token_billing'] == 'disabled') {
+            $input['token_billing'] = 'off';
         }
 
         $this->replace($input);

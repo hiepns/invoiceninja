@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules;
@@ -26,7 +27,10 @@ class ValidUserForCompany implements Rule
      */
     public function passes($attribute, $value)
     {
-        return MultiDB::checkUserAndCompanyCoExist($value, auth()->user()->company()->company_key);
+        /** @var \App\Models\User auth()->user() */
+        $user = auth()->user();
+
+        return MultiDB::checkUserAndCompanyCoExist($value, $user->company()->company_key);
     }
 
     /**
@@ -34,7 +38,6 @@ class ValidUserForCompany implements Rule
      */
     public function message()
     {
-        return 'This user is unable to be attached to this company. Perhaps they have already registered a user on another account?';
-        //return ctrans('texts.email_already_register');
+        return ctrans('texts.user_not_associated_with_this_account');
     }
 }

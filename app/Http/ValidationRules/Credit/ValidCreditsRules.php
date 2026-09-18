@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules\Credit;
@@ -44,57 +45,63 @@ class ValidCreditsRules implements Rule
     private function checkCreditsAreHomogenous()
     {
         if (! array_key_exists('client_id', $this->input)) {
-            $this->error_msg = 'Client id is required';
+            $this->error_msg = ctrans('texts.client_id_required');
 
             return false;
         }
 
         $unique_array = [];
 
+        // $total_credit_amount = array_sum(array_column($this->input['credits'], 'amount'));
+        $total_credit_amount = array_sum(array_map('floatval', array_column($this->input['credits'], 'amount')));
+
+        if ($total_credit_amount <= 0) {
+            $this->error_msg = "Total of credits must be more than zero.";
+
+            return false;
+        }
+
+        $cred_collection = Credit::withTrashed()->whereIn('id', array_column($this->input['credits'], 'credit_id'))->get();
+
         foreach ($this->input['credits'] as $credit) {
             $unique_array[] = $credit['credit_id'];
 
-            $cred = Credit::find($this->decodePrimaryKey($credit['credit_id']));
+            $cred = $cred_collection->firstWhere('id', $credit['credit_id']);
 
             if (! $cred) {
-                $this->error_msg = 'Credit not found ';
-
+                $this->error_msg = ctrans('texts.credit_not_found');
                 return false;
             }
 
             if ($cred->client_id != $this->input['client_id']) {
-                $this->error_msg = 'Selected invoices are not from a single client';
+                $this->error_msg = ctrans('texts.invoices_dont_match_client');
+                return false;
+            }
 
+            if ($cred->status_id == Credit::STATUS_DRAFT) {
+                $cred->service()->markSent()->save();
+                $cred = $cred->fresh();
+            }
+
+            if ($cred->balance < $credit['amount']) {
+                $this->error_msg = ctrans('texts.insufficient_credit_balance');
                 return false;
             }
         }
 
         if (! (array_unique($unique_array) == $unique_array)) {
-            $this->error_msg = 'Duplicate credits submitted.';
+            $this->error_msg = ctrans('texts.duplicate_credits_submitted');
 
             return false;
         }
 
-        if (count($this->input['credits']) >= 1 && count($this->input['invoices']) == 0) {
-            $this->error_msg = 'You must have an invoice set when using a credit in a payment';
+        if (count($this->input['credits']) >= 1 && (!isset($this->input['invoices']) || count($this->input['invoices']) == 0)) {
+            $this->error_msg = ctrans('texts.credit_with_no_invoice');
 
             return false;
         }
 
         if (count($this->input['credits']) >= 1) {
-
-        //    $total_payments = $this->input['amount'] + array_sum(array_column($this->input['credits'], 'amount'));
-
-// info(print_r($this->input,1));
-// info("total payments = {$total_payments}");
-// info("total credits available = " . array_sum(array_column($this->input['credits'], 'amount')));
-// info("total invoices payable = " . array_sum(array_column($this->input['invoices'], 'amount')));
-
-            // if($total_payments > array_sum(array_column($this->input['invoices'], 'amount'))){
-
-            //     $this->error_msg = "Sum of total payments and credits is greater than the total of invoices";
-            //     return false;
-            // }
         }
 
         return true;

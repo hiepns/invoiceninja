@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Listeners\Activity;
@@ -43,10 +44,12 @@ class VendorUpdatedActivity implements ShouldQueue
 
         $vendor = $event->vendor;
 
-        $fields = new stdClass;
+        $fields = new stdClass();
+
+        $user_id = $event->event_vars['user_id'] ?? $event->vendor->user_id;
 
         $fields->vendor_id = $vendor->id;
-        $fields->user_id = $vendor->user_id;
+        $fields->user_id = $user_id;
         $fields->company_id = $vendor->company_id;
         $fields->activity_type_id = Activity::UPDATE_VENDOR;
 

@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\Shop;
@@ -29,7 +30,7 @@ class StoreShopInvoiceRequest extends Request
      */
     private $company;
 
-    public function authorize() : bool
+    public function authorize(): bool
     {
         return true;
     }
@@ -42,13 +43,13 @@ class StoreShopInvoiceRequest extends Request
             $documents = count($this->input('documents'));
 
             foreach (range(0, $documents) as $index) {
-                $rules['documents.'.$index] = 'file|mimes:png,ai,svg,jpeg,tiff,pdf,gif,psd,txt,doc,xls,ppt,xlsx,docx,pptx|max:20000';
+                $rules['documents.' . $index] = 'file|mimes:png,ai,jpeg,tiff,pdf,gif,psd,txt,doc,xls,ppt,xlsx,docx,pptx|max:20000';
             }
         } elseif ($this->input('documents')) {
-            $rules['documents'] = 'file|mimes:png,ai,svg,jpeg,tiff,pdf,gif,psd,txt,doc,xls,ppt,xlsx,docx,pptx|max:20000';
+            $rules['documents'] = 'file|mimes:png,ai,jpeg,tiff,pdf,gif,psd,txt,doc,xls,ppt,xlsx,docx,pptx|max:20000';
         }
 
-        $rules['client_id'] = 'required|exists:clients,id,company_id,'.$this->company->id;
+        $rules['client_id'] = 'required|integer|exists:clients,id,company_id,' . $this->company->id;
 
         $rules['invitations.*.client_contact_id'] = 'distinct';
 
@@ -57,7 +58,7 @@ class StoreShopInvoiceRequest extends Request
         return $rules;
     }
 
-    protected function prepareForValidation()
+    public function prepareForValidation()
     {
         $this->company = Company::where('company_key', request()->header('X-API-COMPANY-KEY'))->firstOrFail();
 

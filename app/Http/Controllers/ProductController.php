@@ -1,34 +1,39 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
 
 use App\Factory\ProductFactory;
 use App\Filters\ProductFilters;
+use App\Http\Requests\Product\BulkProductRequest;
 use App\Http\Requests\Product\CreateProductRequest;
 use App\Http\Requests\Product\DestroyProductRequest;
 use App\Http\Requests\Product\EditProductRequest;
 use App\Http\Requests\Product\ShowProductRequest;
 use App\Http\Requests\Product\StoreProductRequest;
 use App\Http\Requests\Product\UpdateProductRequest;
+use App\Http\Requests\Product\UploadProductRequest;
+use App\Models\Account;
 use App\Models\Product;
 use App\Repositories\ProductRepository;
 use App\Transformers\ProductTransformer;
 use App\Utils\Traits\MakesHash;
-use Illuminate\Http\Request;
+use App\Utils\Traits\SavesDocuments;
 use Illuminate\Http\Response;
 
 class ProductController extends BaseController
 {
     use MakesHash;
+    use SavesDocuments;
 
     protected $entity_type = Product::class;
 
@@ -55,9 +60,8 @@ class ProductController extends BaseController
      *      summary="Gets a list of products",
      *      description="Lists products, search and filters allow fine grained lists to be generated.
 
-    Query parameters can be added to performed more fine grained filtering of the products, these are handled by the ProductFilters class which defines the methods available",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *  Query parameters can be added to performed more fine grained filtering of the products, these are handled by the ProductFilters class which defines the methods available",
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -80,11 +84,11 @@ class ProductController extends BaseController
      *       ),
      *     )
      * @param ProductFilters $filters
-     * @return Response|mixed
+     * @return Response| \Illuminate\Http\JsonResponse|mixed
      */
     public function index(ProductFilters $filters)
     {
-        $products = Product::filter($filters);
+        $products = Product::filter($filters)->with('tags');
 
         return $this->listResponse($products);
     }
@@ -93,7 +97,7 @@ class ProductController extends BaseController
      * Show the form for creating a new resource.
      *
      * @param CreateProductRequest $request
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      *
@@ -103,8 +107,7 @@ class ProductController extends BaseController
      *      tags={"products"},
      *      summary="Gets a new blank Product object",
      *      description="Returns a blank object with default values",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -130,7 +133,11 @@ class ProductController extends BaseController
      */
     public function create(CreateProductRequest $request)
     {
-        $product = ProductFactory::create(auth()->user()->company()->id, auth()->user()->id);
+
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $product = ProductFactory::create($user->company()->id, auth()->user()->id);
 
         return $this->itemResponse($product);
     }
@@ -139,7 +146,7 @@ class ProductController extends BaseController
      * Store a newly created resource in storage.
      *
      * @param StoreProductRequest $request
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      *
@@ -149,8 +156,7 @@ class ProductController extends BaseController
      *      tags={"products"},
      *      summary="Adds a Product",
      *      description="Adds an Product to the system",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -176,7 +182,11 @@ class ProductController extends BaseController
      */
     public function store(StoreProductRequest $request)
     {
-        $product = $this->product_repo->save($request->all(), ProductFactory::create(auth()->user()->company()->id, auth()->user()->id));
+
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $product = $this->product_repo->save($request->all(), ProductFactory::create($user->company()->id, auth()->user()->id));
 
         return $this->itemResponse($product);
     }
@@ -186,7 +196,7 @@ class ProductController extends BaseController
      *
      * @param ShowProductRequest $request
      * @param Product $product
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -195,8 +205,7 @@ class ProductController extends BaseController
      *      tags={"products"},
      *      summary="Shows an Product",
      *      description="Displays an Product by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -241,7 +250,7 @@ class ProductController extends BaseController
      *
      * @param EditProductRequest $request
      * @param Product $product
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      * @OA\Get(
      *      path="/api/v1/products/{id}/edit",
@@ -249,8 +258,7 @@ class ProductController extends BaseController
      *      tags={"products"},
      *      summary="Shows an Product for editting",
      *      description="Displays an Product by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -295,7 +303,7 @@ class ProductController extends BaseController
      *
      * @param UpdateProductRequest $request
      * @param Product $product
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Put(
@@ -304,8 +312,7 @@ class ProductController extends BaseController
      *      tags={"products"},
      *      summary="Updates an Product",
      *      description="Handles the updating of an Product by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -356,7 +363,7 @@ class ProductController extends BaseController
      *
      * @param DestroyProductRequest $request
      * @param Product $product
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @throws \Exception
@@ -366,8 +373,7 @@ class ProductController extends BaseController
      *      tags={"products"},
      *      summary="Deletes a Product",
      *      description="Handles the deletion of an Product by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -403,15 +409,15 @@ class ProductController extends BaseController
      */
     public function destroy(DestroyProductRequest $request, Product $product)
     {
-        $product->delete();
+        $this->product_repo->delete($product);
 
-        return $this->itemResponse($product);
+        return $this->itemResponse($product->fresh());
     }
 
     /**
      * Perform bulk actions on the list view.
      *
-     * @return Collection
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
      *
      *
      * @OA\Post(
@@ -420,8 +426,7 @@ class ProductController extends BaseController
      *      tags={"products"},
      *      summary="Performs bulk actions on an array of products",
      *      description="",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/index"),
      *      @OA\RequestBody(
@@ -460,20 +465,95 @@ class ProductController extends BaseController
      *       ),
      *     )
      */
-    public function bulk()
+    public function bulk(BulkProductRequest $request)
     {
-        $action = request()->input('action');
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        $ids = request()->input('ids');
+        $action = $request->input('action');
 
-        $products = Product::withTrashed()->find($this->transformKeys($ids));
+        $ids = $request->input('ids');
 
-        $products->each(function ($product, $key) use ($action) {
-            if (auth()->user()->can('edit', $product)) {
+        $products = Product::withTrashed()->company()->whereIn('id', $ids);
+
+        if ($action == 'set_tax_id') {
+
+            $tax_id = $request->input('tax_id');
+
+            $products->update(['tax_id' => $tax_id]);
+
+            return $this->listResponse(Product::withTrashed()->company()->whereIn('id', $ids));
+        }
+
+        $products->with('company.account')->lazyById(100)->each(function ($product, $key) use ($action, $user) {
+            if ($user->can('edit', $product)) {
                 $this->product_repo->{$action}($product);
             }
         });
 
-        return $this->listResponse(Product::withTrashed()->whereIn('id', $this->transformKeys($ids)));
+        return $this->listResponse(Product::withTrashed()->company()->whereIn('id', $ids));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param UploadProductRequest $request
+     * @param Product $product
+     * @return Response| \Illuminate\Http\JsonResponse
+     *
+     *
+     *
+     * @OA\Put(
+     *      path="/api/v1/products/{id}/upload",
+     *      operationId="uploadProduct",
+     *      tags={"products"},
+     *      summary="Uploads a document to a product",
+     *      description="Handles the uploading of a document to a product",
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
+     *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
+     *      @OA\Parameter(ref="#/components/parameters/include"),
+     *      @OA\Parameter(
+     *          name="id",
+     *          in="path",
+     *          description="The Product Hashed ID",
+     *          example="D2J234DFA",
+     *          required=true,
+     *          @OA\Schema(
+     *              type="string",
+     *              format="string",
+     *          ),
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Returns the Product object",
+     *          @OA\Header(header="X-MINIMUM-CLIENT-VERSION", ref="#/components/headers/X-MINIMUM-CLIENT-VERSION"),
+     *          @OA\Header(header="X-RateLimit-Remaining", ref="#/components/headers/X-RateLimit-Remaining"),
+     *          @OA\Header(header="X-RateLimit-Limit", ref="#/components/headers/X-RateLimit-Limit"),
+     *          @OA\JsonContent(ref="#/components/schemas/Product"),
+     *       ),
+     *       @OA\Response(
+     *          response=422,
+     *          description="Validation error",
+     *          @OA\JsonContent(ref="#/components/schemas/ValidationError"),
+     *
+     *       ),
+     *       @OA\Response(
+     *           response="default",
+     *           description="Unexpected Error",
+     *           @OA\JsonContent(ref="#/components/schemas/Error"),
+     *       ),
+     *     )
+     */
+    public function upload(UploadProductRequest $request, Product $product)
+    {
+        if (! $this->checkFeature(Account::FEATURE_DOCUMENTS)) {
+            return $this->featureFailure();
+        }
+
+        if ($request->has('documents')) {
+            $this->saveDocuments($request->file('documents'), $product, $request->has('is_public') ? $request->boolean('is_public') : null);
+        }
+
+        return $this->itemResponse($product->fresh());
     }
 }

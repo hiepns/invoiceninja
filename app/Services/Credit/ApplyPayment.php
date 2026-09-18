@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Services\Credit;
@@ -17,6 +18,8 @@ use App\Events\Invoice\InvoiceWasUpdated;
 use App\Models\Credit;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\Paymentable;
+use App\Services\EDocument\Standards\France\FrancePaymentApplicationRecorder;
 use App\Utils\Ninja;
 
 class ApplyPayment
@@ -40,9 +43,8 @@ class ApplyPayment
         $this->payment = $payment->fresh();
     }
 
-    public function run() :Credit
+    public function run(): Credit
     {
-
         //$available_credit_balance = $this->credit->balance;
         $applicable_amount = min($this->amount, $this->credit->balance);
         $invoice_balance = $this->invoice->balance;
@@ -70,8 +72,9 @@ class ApplyPayment
         }
 
         $this->credit->balance -= $this->amount_applied;
+        $this->credit->paid_to_date += $this->amount_applied;
 
-        if ((int)$this->credit->balance == 0) {
+        if ((int) $this->credit->balance == 0) {
             $this->credit->status_id = Credit::STATUS_APPLIED;
         } else {
             $this->credit->status_id = Credit::STATUS_PARTIAL;
@@ -86,7 +89,7 @@ class ApplyPayment
 
     private function applyPaymentToCredit()
     {
-        $credit_item = new InvoiceItem;
+        $credit_item = new InvoiceItem();
         $credit_item->type_id = '1';
         $credit_item->product_key = ctrans('texts.credit');
         $credit_item->notes = ctrans('texts.credit_payment', ['invoice_number' => $this->invoice->number]);
@@ -104,23 +107,25 @@ class ApplyPayment
 
     private function addPaymentToLedger()
     {
-        $this->payment->amount += $this->amount_applied;
-        $this->payment->applied += $this->amount_applied;
+        // $this->payment->amount += $this->amount_applied;
+        // $this->payment->applied += $this->amount_applied;
         $this->payment->status_id = Payment::STATUS_COMPLETED;
         $this->payment->currency_id = $this->credit->client->getSetting('currency_id');
         $this->payment->save();
 
+        $this->payment->service()->applyNumber()->save();
+
         $this->payment
              ->invoices()
              ->attach($this->invoice->id, ['amount' => $this->amount_applied]);
-        
+
         $this->payment
              ->credits()
              ->attach($this->credit->id, ['amount' => $this->amount_applied]);
 
-        $this->payment
-                 ->ledger()
-                 ->updatePaymentBalance($this->amount_applied * -1);
+        // $this->payment
+        //          ->ledger()
+        //          ->updatePaymentBalance($this->amount_applied * -1, "ApplyPaymentCredit"); // this duplicated the company ledger paid to date amount.
 
         $this->payment
                  ->client
@@ -133,18 +138,45 @@ class ApplyPayment
         $this->invoice
                  ->service()
                  ->updateBalance($this->amount_applied * -1)
+                 ->updatePaidToDate($this->amount_applied)
                  ->updateStatus()
                  ->save();
+
+        $this->invoice = $this->invoice->fresh() ?? $this->invoice;
+
+        try {
+            $this->invoice->loadMissing(['client.country', 'client.company']);
+
+            if ($this->invoice->client->reportableFrTransaction()) {
+                $paymentable = Paymentable::withTrashed()
+                    ->where('payment_id', $this->payment->id)
+                    ->where('paymentable_id', $this->invoice->id)
+                    ->where('paymentable_type', 'invoices')
+                    ->latest('id')
+                    ->first();
+
+                app(FrancePaymentApplicationRecorder::class)->recordMovement(
+                    payment: $this->payment,
+                    invoice: $this->invoice,
+                    paymentable: $paymentable,
+                    movementAmount: $this->amount_applied,
+                    movementDate: $this->payment->date ?: now()->toDateString(),
+                    movementType: FrancePaymentApplicationRecorder::MOVEMENT_CREDIT_APPLIED,
+                );
+            }
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
 
         $this->credit
                  ->ledger()
                  ->updateCreditBalance(($this->amount_applied * -1), "Credit payment applied to Invoice {$this->invoice->number}");
 
-        event(new InvoiceWasUpdated($this->invoice, $this->invoice->company, Ninja::eventVars()));
+        event(new InvoiceWasUpdated($this->invoice, $this->invoice->company, Ninja::eventVars(auth()->user() ? auth()->user()->id : null)));
 
-        if ((int)$this->invoice->balance == 0) {
-            $this->invoice->service()->deletePdf();
-            event(new InvoiceWasPaid($this->invoice, $this->payment->company, Ninja::eventVars()));
+        if ((int) $this->invoice->balance == 0) {
+            $this->invoice = $this->invoice->fresh();
+            event(new InvoiceWasPaid($this->invoice, $this->payment, $this->payment->company, Ninja::eventVars(auth()->user() ? auth()->user()->id : null)));
         }
     }
 }

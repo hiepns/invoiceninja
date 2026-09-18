@@ -1,16 +1,18 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Jobs\Invoice;
 
+use App\Models\Company;
 use App\Models\Invoice;
 use CleverIt\UBL\Invoice\Address;
 use CleverIt\UBL\Invoice\Contact;
@@ -34,10 +36,14 @@ use Illuminate\Queue\SerializesModels;
 
 class CreateUbl implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
-    const INVOICE_TYPE_STANDARD = 380;
-    const INVOICE_TYPE_CREDIT = 381;
+    public const INVOICE_TYPE_STANDARD = 380;
+
+    public const INVOICE_TYPE_CREDIT = 381;
 
     public $invoice;
 
@@ -47,10 +53,7 @@ class CreateUbl implements ShouldQueue
     }
 
     /**
-     * Execute the job.
-     *
-     *
-     * @return void
+     * Execute the job
      */
     public function handle()
     {
@@ -62,7 +65,7 @@ class CreateUbl implements ShouldQueue
         // invoice
         $ubl_invoice->setId($invoice->number);
         $ubl_invoice->setIssueDate(date_create($invoice->date));
-        $ubl_invoice->setInvoiceTypeCode($invoice->amount < 0 ? self::INVOICE_TYPE_CREDIT : self::INVOICE_TYPE_STANDARD);
+        $ubl_invoice->setInvoiceTypeCode($invoice->amount < 0 ? (string) self::INVOICE_TYPE_CREDIT : (string) self::INVOICE_TYPE_STANDARD);
 
         $supplier_party = $this->createParty($company, $invoice->user);
         $ubl_invoice->setAccountingSupplierParty($supplier_party);
@@ -82,18 +85,26 @@ class CreateUbl implements ShouldQueue
         $ubl_invoice->setInvoiceLines($invoice_lines);
 
         $taxtotal = new TaxTotal();
-        $taxAmount1 = $taxAmount2 = 0;
+        $taxAmount1 = $taxAmount2 = $taxAmount3 = 0;
 
-        $taxAmount1 = $this->createTaxRate($taxtotal, $taxable, $invoice->tax_rate1, $invoice->tax_name1);
-        if ($invoice->tax_name2 || floatval($invoice->tax_rate2)) {
+        if (strlen($invoice->tax_name1 ?? '') > 1) {
+            $taxAmount1 = $this->createTaxRate($taxtotal, $taxable, $invoice->tax_rate1, $invoice->tax_name1);
+        }
+
+        if (strlen($invoice->tax_name2 ?? '') > 1) {
             $taxAmount2 = $this->createTaxRate($taxtotal, $taxable, $invoice->tax_rate2, $invoice->tax_name2);
         }
 
-        $taxtotal->setTaxAmount($taxAmount1 + $taxAmount2);
+        if (strlen($invoice->tax_name3 ?? '') > 1) {
+            $taxAmount3 = $this->createTaxRate($taxtotal, $taxable, $invoice->tax_rate3, $invoice->tax_name3);
+        }
+
+        $taxtotal->setTaxAmount($taxAmount1 + $taxAmount2 + $taxAmount3);
         $ubl_invoice->setTaxTotal($taxtotal);
 
         $ubl_invoice->setLegalMonetaryTotal((new LegalMonetaryTotal())
             //->setLineExtensionAmount()
+            ->setTaxInclusiveAmount($invoice->balance)
             ->setTaxExclusiveAmount($taxable)
             ->setPayableAmount($invoice->balance));
 
@@ -116,7 +127,7 @@ class CreateUbl implements ShouldQueue
 
         if ($company->country_id) {
             $country = new Country();
-            $country->setIdentificationCode($company->country->iso_3166_2);
+            $country->setIdentificationCode(($company instanceof Company) ? $company->country()->iso_3166_2 : $company->country->iso_3166_2);
             $address->setCountry($country);
         }
 
@@ -144,13 +155,15 @@ class CreateUbl implements ShouldQueue
         $taxtotal = new TaxTotal();
         $itemTaxAmount1 = $itemTaxAmount2 = $itemTaxAmount3 = 0;
 
-        $itemTaxAmount1 = $this->createTaxRate($taxtotal, $taxable, $item->tax_rate1, $item->tax_name1);
+        if (strlen($item->tax_name1 ?? '') > 1) {
+            $itemTaxAmount1 = $this->createTaxRate($taxtotal, $taxable, $item->tax_rate1, $item->tax_name1);
+        }
 
-        if ($item->tax_name2 || floatval($item->tax_rate2)) {
+        if (strlen($item->tax_name2 ?? '') > 1) {
             $itemTaxAmount2 = $this->createTaxRate($taxtotal, $taxable, $item->tax_rate2, $item->tax_name2);
         }
 
-        if ($item->tax_name3 || floatval($item->tax_rate3)) {
+        if (strlen($item->tax_name3 ?? '') > 1) {
             $itemTaxAmount3 = $this->createTaxRate($taxtotal, $taxable, $item->tax_rate3, $item->tax_name3);
         }
 
@@ -181,7 +194,7 @@ class CreateUbl implements ShouldQueue
     /**
      * @param $item
      * @param $invoice_total
-     * @return float|int
+     * @return float
      */
     private function getItemTaxable($item, $invoice_total)
     {
@@ -189,6 +202,7 @@ class CreateUbl implements ShouldQueue
 
         if ($this->invoice->discount != 0) {
             if ($this->invoice->is_amount_discount) {
+                /** @var float $invoice_total */
                 if ($invoice_total + $this->invoice->discount != 0) {
                     $total -= $invoice_total ? ($total / ($invoice_total + $this->invoice->discount) * $this->invoice->discount) : 0;
                 }
@@ -275,7 +289,7 @@ class CreateUbl implements ShouldQueue
     public function taxAmount($taxable, $rate)
     {
         if ($this->invoice->uses_inclusive_taxes) {
-            return round($taxable - ($taxable / (1 + ($rate / 100))), 2);
+            return \App\Helpers\Invoice\InclusiveTax::backout((float) $taxable, [(float) $rate], 2)['tax'];
         } else {
             return round($taxable * ($rate / 100), 2);
         }

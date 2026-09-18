@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Notifications;
@@ -14,14 +15,14 @@ namespace App\Notifications;
 use Closure;
 use Illuminate\Bus\Queueable;
 use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
+//@deprecated
 class ClientContactResetPassword extends Notification
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    // use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
     /**
      * The password reset token.
      *
@@ -55,28 +56,16 @@ class ClientContactResetPassword extends Notification
      */
     public function via($notifiable)
     {
-        return ['mail'];
+        return [];
     }
 
     /**
      * Build the mail representation of the notification.
      *
      * @param  mixed  $notifiable
-     * @return MailMessage
+     *
      */
-    public function toMail($notifiable)
-    {
-        if (static::$toMailCallback) {
-            return call_user_func(static::$toMailCallback, $notifiable, $this->token);
-        }
-
-        return (new MailMessage)
-            ->subject('Reset Password Notification')
-            ->line('You are receiving this email because we received a password reset request for your account.')
-            ->action('Reset Password', url(config('app.url').route('client.password.reset', ['token' => $this->token, 'email' => $notifiable->getEmailForPasswordReset()], false)))
-            ->line('This password reset link will expire in :count minutes.', ['count' => config('auth.passwords.users.expire')])
-            ->line('If you did not request a password reset, no further action is required.');
-    }
+    public function toMail($notifiable) {}
 
     /**
      * Set a callback that should be used when building the notification mail message.

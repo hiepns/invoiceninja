@@ -1,24 +1,28 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Unit;
 
 use App\DataMapper\CompanySettings;
 use Tests\TestCase;
 
 /**
- * @test
+ *
  */
 class PdfVariablesTest extends TestCase
 {
-    public function setUp() :void
+    public $settings;
+    
+    protected function setUp(): void
     {
         parent::setUp();
 

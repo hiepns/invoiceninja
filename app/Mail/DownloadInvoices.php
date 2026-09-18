@@ -1,15 +1,26 @@
 <?php
 
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
+
 namespace App\Mail;
 
 use App\Models\Company;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\App;
 
 class DownloadInvoices extends Mailable
 {
-    use Queueable, SerializesModels;
+    // use Queueable, SerializesModels;
 
     public $file_path;
 
@@ -24,21 +35,22 @@ class DownloadInvoices extends Mailable
 
     /**
      * Build the message.
-     *
-     * @return $this
-     * @throws \Laracasts\Presenter\Exceptions\PresenterException
      */
     public function build()
     {
-        
-        return $this->from(config('mail.from.name'), config('mail.from.address'))
+        App::setLocale($this->company->getLocale());
+
+        return $this->from(config('mail.from.address'), config('mail.from.name'))
             ->subject(ctrans('texts.download_files'))
-            ->markdown(
-                'email.admin.download_files',
-                [
-                    'url' => $this->file_path,
-                    'logo' => $this->company->present()->logo,
-                ]
-            );
+            ->text('email.admin.download_invoices_text', [
+                'url' => $this->file_path,
+            ])
+            ->view('email.admin.download_invoices', [
+                'url' => $this->file_path,
+                'logo' => $this->company->present()->logo,
+                'whitelabel' => $this->company->account->isPaid() ? true : false,
+                'settings' => $this->company->settings,
+                'greeting' => $this->company->present()->name(),
+            ]);
     }
 }

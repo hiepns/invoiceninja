@@ -4,10 +4,11 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Database\Seeders;
 
 use App\Models\GatewayType;
@@ -35,6 +36,7 @@ class GatewayTypesSeeder extends Seeder
             ['id' => 12, 'alias' => 'custom2', 'name' => 'Custom'],
             ['id' => 13, 'alias' => 'custom3', 'name' => 'Custom'],
             ['id' => 14, 'alias' => 'credit', 'name' => 'Credit'],
+            ['id' => 30, 'alias' => 'mobile_payment', 'name' => 'Mobile Payment'],
         ];
 
         foreach ($gateway_types as $gateway_type) {

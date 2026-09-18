@@ -1,20 +1,24 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Middleware;
 
+use App\DataMapper\Analytics\DbQuery;
+use App\Utils\Ninja;
 use Closure;
-use DB;
 use Illuminate\Http\Request;
-use Log;
+use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\Response;
+use Turbo124\Beacon\Facades\LightLogs;
 
 /**
  * Class QueryLogging.
@@ -29,33 +33,65 @@ class QueryLogging
      *
      * @return mixed
      */
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): mixed
     {
-        $timeStart = microtime(true);
-
-        // Enable query logging for development
-        if (config('ninja.app_env') != 'production') {
-            DB::enableQueryLog();
+        if (! Ninja::isHosted() || ! config('beacon.enabled')) {
+            return $next($request);
         }
 
-        $response = $next($request);
+        DB::flushQueryLog();
+        DB::enableQueryLog();
 
-        if (config('ninja.app_env') != 'production') {
+        return $next($request);
+    }
 
-            // hide requests made by debugbar
-            if (strstr($request->url(), '_debugbar') === false) {
-                $queries = DB::getQueryLog();
-                $count = count($queries);
-                $timeEnd = microtime(true);
-                $time = $timeEnd - $timeStart;
+    public function terminate(Request $request, Response $response): void
+    {
+        if (! Ninja::isHosted() || ! config('beacon.enabled')) {
+            return;
+        }
 
-                Log::info($request->method().' - '.$request->url().": $count queries - ".$time);
-
-                //  if($count > 50)
-                //   Log::info($queries);
+        try {
+            if (str_contains($request->url(), '_debugbar')) {
+                return;
             }
-        }
 
-        return $response;
+            $count = count(DB::getQueryLog());
+            $timeEnd = microtime(true);
+            $time = $timeEnd - LARAVEL_START;
+
+            // if ($count > 175) {
+            //     nlog("Query count = {$count}");
+            // }
+
+            $ip = '';
+
+            if ($request->hasHeader('Cf-Connecting-Ip')) {
+                $ip = $request->header('Cf-Connecting-Ip') ?? '';
+            } elseif ($request->hasHeader('X-Forwarded-For')) {
+                $ip = $request->header('Cf-Connecting-Ip') ?? '';
+            } else {
+                $ip = $request->ip() ?? '';
+            }
+
+            $client_version = $request->server('HTTP_USER_AGENT');
+            $platform = '';
+
+            if ($request->hasHeader('X-CLIENT-PLATFORM')) {
+                $platform = $request->header('X-CLIENT-PLATFORM');
+            } elseif ($request->hasHeader('X-React')) {
+                $platform = 'react';
+            }
+
+            if ($request->hasHeader('X-CLIENT-VERSION')) {
+                $client_version = $request->header('X-CLIENT-VERSION');
+            }
+
+            LightLogs::create(new DbQuery($request->method(), substr(urldecode($request->url()), 0, 180), $count, $time, $ip, $client_version, $platform))
+                ->batch();
+        } finally {
+            DB::disableQueryLog();
+            DB::flushQueryLog();
+        }
     }
 }

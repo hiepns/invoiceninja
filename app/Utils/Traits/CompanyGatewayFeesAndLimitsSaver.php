@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Utils\Traits;
@@ -28,6 +29,9 @@ trait CompanyGatewayFeesAndLimitsSaver
             $fee_and_limit = (object) $fee_and_limit;
 
             foreach ($casts as $key => $value) {
+                if ($value == 'float' && property_exists($fee_and_limit, $key)) {
+                    $fee_and_limit->{$key} = floatval($fee_and_limit->{$key});
+                }
 
                 /* Handles unset settings or blank strings */
                 if (! property_exists($fee_and_limit, $key) || is_null($fee_and_limit->{$key}) || ! isset($fee_and_limit->{$key}) || $fee_and_limit->{$key} == '') {
@@ -50,7 +54,7 @@ trait CompanyGatewayFeesAndLimitsSaver
      * @param  string $value The object property
      * @return bool        TRUE if the property is the expected type
      */
-    private function checkAttribute($key, $value) :bool
+    private function checkAttribute($key, $value): bool
     {
         switch ($key) {
             case 'int':
@@ -59,9 +63,10 @@ trait CompanyGatewayFeesAndLimitsSaver
             case 'real':
             case 'float':
             case 'double':
-                return is_float($value) || is_numeric(strval($value));
+                return ! is_string($value) && (is_float($value) || is_numeric(strval($value)));
+                //     return is_float($value) || is_numeric(strval($value));
             case 'string':
-                return method_exists($value, '__toString') || is_null($value) || is_string($value);
+                return (is_string($value) && method_exists($value, '__toString')) || is_null($value) || is_string($value);
             case 'bool':
             case 'boolean':
                 return is_bool($value) || (int) filter_var($value, FILTER_VALIDATE_BOOLEAN);
@@ -72,36 +77,18 @@ trait CompanyGatewayFeesAndLimitsSaver
             case 'json':
                 json_decode($value);
 
-                    return json_last_error() == JSON_ERROR_NONE;
+                return json_last_error() == JSON_ERROR_NONE;
             default:
                 return false;
         }
     }
 
-    // public function cleanFeesAndLimits($fees_and_limits)
-    // {
-    //     $new_arr = [];
-
-    //     foreach ($fees_and_limits as $key => $value) {
-    //         $fal = new FeesAndLimits;
-
-    //         foreach ($value as $k => $v) {
-    //             $fal->{$k} = $v;
-    //             $fal->{$k} = BaseSettings::castAttribute(FeesAndLimits::$casts[$k], $v);
-    //         }
-
-    //         $new_arr[$key] = (array)$fal;
-    //     }
-
-    //     return $new_arr;
-    // }
-    //
     public function cleanFeesAndLimits($fees_and_limits)
     {
         $new_arr = [];
 
         foreach ($fees_and_limits as $key => $value) {
-            $fal = new FeesAndLimits;
+            $fal = new FeesAndLimits();
             // $fal->{$key} = $value;
 
             foreach ($value as $k => $v) {

@@ -1,64 +1,87 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Helpers\Invoice;
 
+use App\Models\Client;
+use App\Models\Credit;
 use App\Models\Invoice;
+use App\Models\PurchaseOrder;
+use App\Models\Quote;
+use App\Models\RecurringInvoice;
+use App\Models\RecurringQuote;
+use App\Models\Vendor;
+use App\Utils\Number;
 use App\Utils\Traits\NumberFormatter;
 use Illuminate\Support\Collection;
 
 class InvoiceSum
 {
     use Taxer;
-    use Balancer;
     use CustomValuer;
     use Discounter;
     use NumberFormatter;
 
-    protected $invoice;
+    protected RecurringInvoice|Invoice|Quote|Credit|PurchaseOrder|RecurringQuote $invoice;
 
     public $tax_map;
 
     public $invoice_item;
 
-    public $total_taxes;
+    public $total_taxes = 0;
 
-    private $total;
+    private $total = 0;
 
-    private $total_discount;
+    private $total_discount = 0;
 
     private $total_custom_values;
 
     private $total_tax_map;
 
-    private $sub_total;
+    private $sub_total = 0;
 
+    private $gross_sub_total = 0;
+
+    private $precision;
+
+    private Client|Vendor $client;
+
+    public InvoiceItemSum $invoice_items;
+
+    private $rappen_rounding = false;
     /**
      * Constructs the object with Invoice and Settings object.
      *
-     * @param      Invoice  $invoice   The invoice
+     * @param RecurringInvoice | Invoice | Quote | Credit | PurchaseOrder | RecurringQuote $invoice;
      */
     public function __construct($invoice)
     {
-        $this->invoice = $invoice;
 
-        $this->tax_map = new Collection;
+        $this->invoice = $invoice;
+        $this->client = $invoice->client ?? $invoice->vendor;
+
+        $this->precision = $this->client->currency()->precision;
+        $this->rappen_rounding = $this->client->getSetting('enable_rappen_rounding');
+
+        $this->tax_map = new Collection();
+
     }
 
     public function build()
     {
         $this->calculateLineItems()
              ->calculateDiscount()
-             ->calculateCustomValues()
              ->calculateInvoiceTaxes()
+             ->calculateCustomValues()
              ->setTaxMap()
              ->calculateTotals()
              ->calculateBalance()
@@ -67,18 +90,19 @@ class InvoiceSum
         return $this;
     }
 
-    private function calculateLineItems()
+    private function calculateLineItems(): self
     {
         $this->invoice_items = new InvoiceItemSum($this->invoice);
         $this->invoice_items->process();
         $this->invoice->line_items = $this->invoice_items->getLineItems();
         $this->total = $this->invoice_items->getSubTotal();
         $this->setSubTotal($this->invoice_items->getSubTotal());
+        $this->setGrossSubTotal($this->invoice_items->getGrossSubTotal());
 
         return $this;
     }
 
-    private function calculateDiscount()
+    private function calculateDiscount(): self
     {
         $this->total_discount = $this->discount($this->invoice_items->getSubTotal());
 
@@ -87,18 +111,14 @@ class InvoiceSum
         return $this;
     }
 
-    private function calculateCustomValues()
+    private function calculateCustomValues(): self
     {
-        $this->total_taxes += $this->valuerTax($this->invoice->custom_surcharge1, $this->invoice->custom_surcharge_taxes1);
         $this->total_custom_values += $this->valuer($this->invoice->custom_surcharge1);
 
-        $this->total_taxes += $this->valuerTax($this->invoice->custom_surcharge2, $this->invoice->custom_surcharge_taxes2);
         $this->total_custom_values += $this->valuer($this->invoice->custom_surcharge2);
 
-        $this->total_taxes += $this->valuerTax($this->invoice->custom_surcharge3, $this->invoice->custom_surcharge_taxes3);
         $this->total_custom_values += $this->valuer($this->invoice->custom_surcharge3);
 
-        $this->total_taxes += $this->valuerTax($this->invoice->custom_surcharge4, $this->invoice->custom_surcharge_taxes4);
         $this->total_custom_values += $this->valuer($this->invoice->custom_surcharge4);
 
         $this->total += $this->total_custom_values;
@@ -106,24 +126,60 @@ class InvoiceSum
         return $this;
     }
 
-    private function calculateInvoiceTaxes()
+    private function calculateInvoiceTaxes(): self
     {
-        if ($this->invoice->tax_rate1 > 0) {
+        if ($this->client->is_tax_exempt) {
+            $this->invoice->tax_name1 = '';
+            $this->invoice->tax_name2 = '';
+            $this->invoice->tax_name3 = '';
+            $this->invoice->tax_rate1 = 0;
+            $this->invoice->tax_rate2 = 0;
+            $this->invoice->tax_rate3 = 0;
+            $this->total_taxes = 0;
+            $this->total_tax_map = [];
+            return $this;
+        }
+
+        if (is_string($this->invoice->tax_name1) && strlen($this->invoice->tax_name1) >= 2) {
+
             $tax = $this->taxer($this->total, $this->invoice->tax_rate1);
+
+            $tax += $this->getSurchargeTaxTotalForKey($this->invoice->tax_name1, $this->invoice->tax_rate1);
+
             $this->total_taxes += $tax;
-            $this->total_tax_map[] = ['name' => $this->invoice->tax_name1.' '.$this->invoice->tax_rate1.'%', 'total' => $tax];
+            $this->total_tax_map[] = [
+                'name' => $this->invoice->tax_name1 . ' ' . Number::formatValueNoTrailingZeroes(floatval($this->invoice->tax_rate1), $this->client) . '%',
+                'total' => $tax,
+                'tax_rate' => $this->invoice->tax_rate1,
+                'base_amount' => $this->total,
+            ];
+
         }
 
-        if ($this->invoice->tax_rate2 > 0) {
+        if (is_string($this->invoice->tax_name2) && strlen($this->invoice->tax_name2) >= 2) {
             $tax = $this->taxer($this->total, $this->invoice->tax_rate2);
+            $tax += $this->getSurchargeTaxTotalForKey($this->invoice->tax_name2, $this->invoice->tax_rate2);
+
             $this->total_taxes += $tax;
-            $this->total_tax_map[] = ['name' => $this->invoice->tax_name2.' '.$this->invoice->tax_rate2.'%', 'total' => $tax];
+            $this->total_tax_map[] = [
+                'name' => $this->invoice->tax_name2 . ' ' . Number::formatValueNoTrailingZeroes(floatval($this->invoice->tax_rate2), $this->client) . '%',
+                'total' => $tax,
+                'tax_rate' => $this->invoice->tax_rate2,
+                'base_amount' => $this->total,
+            ];
         }
 
-        if ($this->invoice->tax_rate3 > 0) {
+        if (is_string($this->invoice->tax_name3) && strlen($this->invoice->tax_name3) >= 2) {
             $tax = $this->taxer($this->total, $this->invoice->tax_rate3);
+            $tax += $this->getSurchargeTaxTotalForKey($this->invoice->tax_name3, $this->invoice->tax_rate3);
+
             $this->total_taxes += $tax;
-            $this->total_tax_map[] = ['name' => $this->invoice->tax_name3.' '.$this->invoice->tax_rate3.'%', 'total' => $tax];
+            $this->total_tax_map[] = [
+                'name' => $this->invoice->tax_name3 . ' ' . Number::formatValueNoTrailingZeroes(floatval($this->invoice->tax_rate3), $this->client) . '%',
+                'total' => $tax,
+                'tax_rate' => $this->invoice->tax_rate3,
+                'base_amount' => $this->total,
+            ];
         }
 
         return $this;
@@ -134,51 +190,45 @@ class InvoiceSum
      *
      * @return     self  The balance.
      */
-    private function calculateBalance()
+    private function calculateBalance(): self
     {
-        //$this->invoice->balance = $this->balance($this->getTotal(), $this->invoice);
         $this->setCalculatedAttributes();
 
         return $this;
     }
 
-    private function calculatePartial()
+    private function calculatePartial(): self
     {
         if (! isset($this->invoice->id) && isset($this->invoice->partial)) {
-            $this->invoice->partial = max(0, min($this->formatValue($this->invoice->partial, 2), $this->invoice->balance));
+            $this->invoice->partial = max(0, min(Number::roundValue($this->invoice->partial, 2), $this->invoice->balance));
         }
 
         return $this;
     }
 
-    private function calculateTotals()
+    private function calculateTotals(): self
     {
         $this->total += $this->total_taxes;
 
-        if (is_numeric($this->invoice->custom_value1)) {
-            $this->total += $this->invoice->custom_value1;
-        }
-
-        if (is_numeric($this->invoice->custom_value2)) {
-            $this->total += $this->invoice->custom_value2;
-        }
-
-        if (is_numeric($this->invoice->custom_value3)) {
-            $this->total += $this->invoice->custom_value3;
-        }
-
-        if (is_numeric($this->invoice->custom_value4)) {
-            $this->total += $this->invoice->custom_value4;
-        }
-
         return $this;
+    }
+
+    /**
+     * Allow us to get the entity without persisting it
+     * @return Invoice the temp
+     */
+    public function getTempEntity()
+    {
+        $this->setCalculatedAttributes();
+
+        return $this->invoice;
     }
 
     public function getInvoice()
     {
         //Build invoice values here and return Invoice
         $this->setCalculatedAttributes();
-        $this->invoice->save();
+        $this->invoice->saveQuietly();
 
         return $this->invoice;
     }
@@ -186,7 +236,7 @@ class InvoiceSum
     public function getQuote()
     {
         $this->setCalculatedAttributes();
-        $this->invoice->save();
+        $this->invoice->saveQuietly();
 
         return $this->invoice;
     }
@@ -194,18 +244,25 @@ class InvoiceSum
     public function getCredit()
     {
         $this->setCalculatedAttributes();
-        $this->invoice->save();
+        $this->invoice->saveQuietly();
+
+        return $this->invoice;
+    }
+
+    public function getPurchaseOrder()
+    {
+        $this->setCalculatedAttributes();
+        $this->invoice->saveQuietly();
 
         return $this->invoice;
     }
 
     public function getRecurringInvoice()
     {
-        $this->invoice->amount = $this->formatValue($this->getTotal(), $this->invoice->client->currency()->precision);
-        $this->invoice->total_taxes = $this->getTotalTaxes();
-        $this->invoice->balance = $this->formatValue($this->getTotal(), $this->invoice->client->currency()->precision);
 
-        $this->invoice->save();
+        $this->setCalculatedAttributes();
+        $this->invoice->balance = $this->invoice->amount;
+        $this->invoice->saveQuietly();
 
         return $this->invoice;
     }
@@ -214,25 +271,42 @@ class InvoiceSum
      * Build $this->invoice variables after
      * calculations have been performed.
      */
-    private function setCalculatedAttributes()
+    private function setCalculatedAttributes(): self
     {
-        /* If amount != balance then some money has been paid on the invoice, need to subtract this difference from the total to set the new balance */
+        if ($this->invoice->status_id == Invoice::STATUS_CANCELLED) {
+            $this->invoice->balance = 0;
+        } elseif ($this->invoice->status_id != Invoice::STATUS_DRAFT) {
+            // if ($this->invoice->amount != $this->invoice->balance) {
+            //     $this->invoice->balance = Number::roundValue($this->getTotal(), $this->precision) - $this->invoice->paid_to_date; //21-02-2024 cannot use the calculated $paid_to_date here as it could send the balance backward.
+            // } else {
+            //     $this->invoice->balance = Number::roundValue($this->getTotal(), $this->precision);
+            // }
 
-        if ($this->invoice->status_id != Invoice::STATUS_DRAFT) {
-            if ($this->invoice->amount != $this->invoice->balance) {
-                $paid_to_date = $this->invoice->amount - $this->invoice->balance;
-
-                $this->invoice->balance = $this->formatValue($this->getTotal(), $this->invoice->client->currency()->precision) - $paid_to_date;
-            } else {
-                $this->invoice->balance = $this->formatValue($this->getTotal(), $this->invoice->client->currency()->precision);
-            }
+            // 2026-05-19 - This is a regression fix balance not decrementing after payments.
+            $new_total     = Number::roundValue($this->getTotal(), $this->precision);
+            $amount_delta  = $new_total - $this->invoice->amount;   // amount = persisted pre-edit value
+            $this->invoice->balance = Number::roundValue($this->invoice->balance + $amount_delta, $this->precision);
         }
         /* Set new calculated total */
-        $this->invoice->amount = $this->formatValue($this->getTotal(), $this->invoice->client->currency()->precision);
+        $this->invoice->amount = $this->formatValue($this->getTotal(), $this->precision);
 
-        $this->invoice->total_taxes = $this->getTotalTaxes();
+        $this->invoice->total_taxes = $this->formatValue($this->getTotalTaxes(), $this->precision);
+
+        if ($this->rappen_rounding) {
+            $this->invoice->amount = $this->roundRappen($this->invoice->amount);
+            $this->invoice->balance = $this->roundRappen($this->invoice->balance);
+            $this->total = $this->roundRappen($this->total);
+            $this->invoice->total_taxes = $this->roundRappen($this->invoice->total_taxes);
+        }
+
 
         return $this;
+    }
+
+
+    public function roundRappen($value): float
+    {
+        return round($value / .05, 0) * .05;
     }
 
     public function getSubTotal()
@@ -243,6 +317,18 @@ class InvoiceSum
     public function setSubTotal($value)
     {
         $this->sub_total = $value;
+
+        return $this;
+    }
+
+    public function getGrossSubTotal()
+    {
+        return $this->gross_sub_total;
+    }
+
+    public function setGrossSubTotal($value): self
+    {
+        $this->gross_sub_total = $value;
 
         return $this;
     }
@@ -267,10 +353,16 @@ class InvoiceSum
         return $this->total;
     }
 
-    public function setTaxMap()
+    public function getTotalSurcharges()
     {
-        if ($this->invoice->is_amount_discount == true) {
+        return $this->total_custom_values;
+    }
+
+    public function setTaxMap(): self
+    {
+        if ($this->invoice->is_amount_discount) {
             $this->invoice_items->calcTaxesWithAmountDiscount();
+            $this->invoice->line_items = $this->invoice_items->getLineItems();
         }
 
         $this->tax_map = collect();
@@ -284,18 +376,64 @@ class InvoiceSum
                 return $value['key'] == $key;
             })->pluck('tax_name')->first();
 
+            $tax_rate = $values->filter(function ($value, $k) use ($key) {
+                return $value['key'] == $key;
+            })->pluck('tax_rate')->first();
+
+            $tax_id = $values->filter(function ($value, $k) use ($key) {
+                return $value['key'] == $key;
+            })->pluck('tax_id')->first();
+
             $total_line_tax = $values->filter(function ($value, $k) use ($key) {
                 return $value['key'] == $key;
             })->sum('total');
 
-            //$total_line_tax -= $this->discount($total_line_tax);
+            $base_amount = $values->filter(function ($value, $k) use ($key) {
+                return $value['key'] == $key;
+            })->sum('base_amount');
 
-            $this->tax_map[] = ['name' => $tax_name, 'total' => $total_line_tax];
+            // $tax_id = $values->first()['tax_id'] ?? '';
+
+            /**
+             * Round the per-category tax total at the boundary so the InvoiceNinja
+             * invoice and the PEPPOL document agree:
+             *
+             *   - PEPPOL TaxSubtotal/TaxAmount (BT-117) is rounded to 2dp per category.
+             *   - PEPPOL TaxTotal/TaxAmount (BT-110) must equal the sum of BT-117 (BR-CO-15).
+             *   - Invoice total_taxes is the sum of these category totals.
+             *
+             * Without this round, calcAmountLineTax (unrounded for PEPPOL clients) lets
+             * fractional cents accumulate in total_taxes while the serializer rounds
+             * each category, producing a 1c drift between BT-110 and Σ BT-117.
+             */
+            $total_line_tax = round($total_line_tax, $this->precision);
+
+            $this->tax_map[] = ['name' => $tax_name, 'total' => $total_line_tax, 'tax_id' => $tax_id, 'tax_rate' => $tax_rate, 'base_amount' => round($base_amount, 2)];
 
             $this->total_taxes += $total_line_tax;
         }
 
         return $this;
+    }
+
+    private function getSurchargeTaxTotalForKey($key, $rate)
+    {
+        $tax_component = 0;
+        $is_peppol = $this->client->getSetting('e_invoice_type') === 'PEPPOL';
+
+        foreach ([1, 2, 3, 4] as $i) {
+            $amount = $this->invoice->{"custom_surcharge{$i}"};
+
+            if (! is_numeric($amount) || $amount <= 0) {
+                continue;
+            }
+
+            if ($is_peppol || $this->invoice->{"custom_surcharge_tax{$i}"}) {
+                $tax_component += round($amount * ($rate / 100), 2);
+            }
+        }
+
+        return $tax_component;
     }
 
     public function getTaxMap()
@@ -313,18 +451,8 @@ class InvoiceSum
         return $this->getTotalTaxes();
     }
 
-    public function purgeTaxes()
+    public function purgeTaxes(): self
     {
-        $this->tax_rate1 = 0;
-        $this->tax_name1 = '';
-
-        $this->tax_rate2 = 0;
-        $this->tax_name2 = '';
-
-        $this->tax_rate3 = 0;
-        $this->tax_name3 = '';
-
-        $this->discount = 0;
 
         $line_items = collect($this->invoice->line_items);
 
@@ -345,5 +473,15 @@ class InvoiceSum
         $this->build();
 
         return $this;
+    }
+
+    public function getNetSubtotal()
+    {
+        return $this->getSubTotal() - $this->getTotalDiscount();
+    }
+
+    public function getSubtotalWithSurcharges()
+    {
+        return $this->getSubTotal() + $this->getTotalSurcharges();
     }
 }

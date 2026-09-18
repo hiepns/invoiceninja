@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Services\Invoice;
@@ -14,68 +15,91 @@ namespace App\Services\Invoice;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Services\AbstractService;
+use App\Utils\BcMath;
 
 class ApplyPayment extends AbstractService
 {
-    private $invoice;
+    public function __construct(private Invoice $invoice, private Payment $payment, private float $payment_amount) {}
 
-    private $payment;
-
-    private $payment_amount;
-
-    public function __construct($invoice, $payment, $payment_amount)
-    {
-        $this->invoice = $invoice;
-        $this->payment = $payment;
-        $this->payment_amount = $payment_amount;
-    }
-
+    /**
+     * Apply a payment to a single invoice.
+     *
+     */
     public function run()
     {
+        $this->invoice = $this->invoice->fresh('client');
+
+        $amount_paid = 0;
+
+        $had_partial = $this->invoice->hasPartial();
+
+        if ($had_partial && BcMath::lessThan($this->payment_amount, $this->invoice->partial)) {
+            // --- Stage 1: underpaying the requested deposit ---------------
+            $amount_paid = $this->payment_amount * -1;
+
+            $this->invoice
+                 ->service()
+                 ->updatePartial($amount_paid)
+                 ->updateBalance($amount_paid)
+                 ->updatePaidToDate($amount_paid * -1)
+                 ->save();
+        } else {
+            // --- Stage 2: Paying the exact invoice balance ------------
+            if (BcMath::equal($this->payment_amount, $this->invoice->balance)) {
+                $amount_paid = $this->payment_amount * -1;
+                $status = Invoice::STATUS_PAID;
+            } 
+            // --- Stage 3: Paying less than the invoice balance -------------
+            elseif (BcMath::lessThan($this->payment_amount, $this->invoice->balance)) {
+                $amount_paid = $this->payment_amount * -1;
+                $status = Invoice::STATUS_PARTIAL;
+            } else {
+                // --- Stage 4: Overpayment — cap at invoice balance. The excess stays on
+                $amount_paid = $this->invoice->balance * -1;
+                $status = Invoice::STATUS_PAID;
+            }
+
+            // Preserve legacy behaviour: clearPartial() + setDueDate() are
+            // only invoked when a partial was actually in play on entry. For
+            // non-partial invoices the old code never touched these, so
+            // neither do we — this keeps the refactor strictly minimal.
+            $service = $this->invoice->service();
+
+            if ($had_partial) {
+                $service = $service->clearPartial()->setDueDate();
+            }
+
+            $service->setStatus($status)
+                    ->updateBalance($amount_paid)
+                    ->updatePaidToDate($amount_paid * -1)
+                    ->save();
+        }
+
+        $this->invoice = $this->invoice->fresh();
+
+        // Legacy behaviour: reminder state is re-evaluated only when the
+        // invoice had a partial on entry (the old hasPartial block always
+        // ended with checkReminderStatus; the non-partial block did not).
+        if ($had_partial) {
+            $this->invoice = $this->invoice->service()->checkReminderStatus()->save();
+        }
+
         $this->payment
              ->ledger()
-             ->updatePaymentBalance($this->payment_amount * -1);
+             ->updatePaymentBalance($amount_paid, "ApplyPaymentInvoice");
 
-        info("apply payment method - current client balance = {$this->payment->client->balance}");
+        $this->invoice
+             ->client
+             ->service()
+             ->updateBalance($amount_paid)
+             ->save();
 
-        info("reducing client balance by payment amount {$this->payment_amount}");
-
-        $this->invoice->client->service()->updateBalance($this->payment_amount * -1)->save();
-//        $this->invoice->client->service()->updateBalance($this->payment_amount*-1)->updatePaidToDate($this->payment_amount)->save();
-
-        info("post client balance = {$this->invoice->client->balance}");
-
-        /* Update Pivot Record amount */
-        $this->payment->invoices->each(function ($inv) {
-            if ($inv->id == $this->invoice->id) {
-                $inv->pivot->amount = $this->payment_amount;
-                $inv->pivot->save();
-            }
-        });
-
-        $this->invoice->fresh('client');
-
-        info("1 end of apply payment method the client balance = {$this->invoice->client->balance}");
-
-        if ($this->invoice->hasPartial()) {
-            //is partial and amount is exactly the partial amount
-            if ($this->invoice->partial == $this->payment_amount) {
-                $this->invoice->service()->clearPartial()->setDueDate()->setStatus(Invoice::STATUS_PARTIAL)->updateBalance($this->payment_amount * -1);
-            } elseif ($this->invoice->partial > 0 && $this->invoice->partial > $this->payment_amount) { //partial amount exists, but the amount is less than the partial amount
-                $this->invoice->service()->updatePartial($this->payment_amount * -1)->updateBalance($this->payment_amount * -1);
-            } elseif ($this->invoice->partial > 0 && $this->invoice->partial < $this->payment_amount) { //partial exists and the amount paid is GREATER than the partial amount
-                $this->invoice->service()->clearPartial()->setDueDate()->setStatus(Invoice::STATUS_PARTIAL)->updateBalance($this->payment_amount * -1);
-            }
-        } elseif ($this->payment_amount == $this->invoice->balance) { //total invoice paid.
-            $this->invoice->service()->clearPartial()->setStatus(Invoice::STATUS_PAID)->updateBalance($this->payment_amount * -1);
-        } elseif ($this->payment_amount < $this->invoice->balance) { //partial invoice payment made
-            $this->invoice->service()->clearPartial()->setStatus(Invoice::STATUS_PARTIAL)->updateBalance($this->payment_amount * -1);
-        }
-        info("2 end of apply payment method the client balnace = {$this->invoice->client->balance}");
-
-        $this->invoice->service()->applyNumber()->save();
-
-        info("3 end of apply payment method the client balnace = {$this->invoice->client->balance}");
+        $this->invoice =$this->invoice
+             ->service()
+             ->applyNumber()
+             ->workFlow()
+             ->unlockDocuments()
+             ->save();
 
         return $this->invoice;
     }

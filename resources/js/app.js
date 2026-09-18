@@ -1,33 +1,20 @@
 /**
- * Axios
+ * Invoice Ninja (https://invoiceninja.com).
  *
- * Promise based HTTP client for the browser and node.js
- * https://github.com/axios/axios
- */
-window.axios = require('axios');
-
-/**
- * card-validator
+ * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * Validate credit cards as users type.
- * https://github.com/braintree/card-validator
+ * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
  */
-window.valid = require('card-validator');
 
-/**
- * Toggle processing overlay.
- */
-window.processingOverlay = (show) => {
-    if (show) {
-        return document
-            .getElementById('processing-overlay')
-            .classList.remove('hidden');
-    }
+import axios from 'axios';
+import cardValidator from 'card-validator';
+import { Livewire, Alpine } from '../../vendor/livewire/livewire/dist/livewire.esm';
 
-    return document
-        .getElementById('processing-overlay')
-        .classList.add('hidden');
-};
+Livewire.start()
+window.axios = axios;
+window.valid = cardValidator;
 
 /**
  * Remove flashing message div after 3 seconds.
@@ -35,5 +22,18 @@ window.processingOverlay = (show) => {
 document.querySelectorAll('.disposable-alert').forEach((element) => {
     setTimeout(() => {
         element.remove();
-    }, 3000);
+    }, 5000);
 });
+
+/**
+ * Conditionally load DocuNinja builder if available
+ */
+(async () => {
+    try {
+        const modulePath = '/build/assets/builder.iife.js';
+        await import(/* @vite-ignore */ modulePath);
+        console.log('DocuNinja loaded');
+    } catch (e) {
+        console.log('DocuNinja not available, skipping...');
+    }
+})();

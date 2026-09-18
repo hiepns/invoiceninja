@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Utils;
@@ -44,7 +45,7 @@ class CurlUtils
         $response = curl_exec($curl);
 
         if ($error = curl_error($curl)) {
-            Log::error('CURL Error #'.curl_errno($curl).': '.$error);
+            Log::error('CURL Error #' . curl_errno($curl) . ': ' . $error);
         }
 
         curl_close($curl);

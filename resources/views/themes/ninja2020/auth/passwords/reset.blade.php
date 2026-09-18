@@ -4,6 +4,13 @@
 @section('body')
     <div class="flex h-screen">
         <div class="m-auto md:w-1/3 lg:w-1/5">
+
+        @if($account && !$account->isPaid())
+        <div>
+            <img src="{{ asset('images/invoiceninja-black-logo-2.png') }}" class="border-b border-gray-100 h-18 pb-4" alt="Invoice Ninja logo">
+        </div>
+        @endif
+
             <div class="flex flex-col">
                 <h1 class="text-center text-3xl">{{ ctrans('texts.password_reset') }}</h1>
                 @if(session('status'))
@@ -14,12 +21,15 @@
                 <form action="{{ route('password.update') }}" method="post" class="mt-6">
                     @csrf
                     <input type="hidden" name="token" value="{{ $token }}">
+                    @if(request()->has('react') && request()->react == 'true')
+                        <input type="hidden" name="react" value="true">
+                    @endif
                     <div class="flex flex-col">
                         <label for="email" class="input-label">{{ ctrans('texts.email_address') }}</label>
                         <input type="email" name="email" id="email"
-                               class="input"
+                               class="input @if(!empty($email)) bg-gray-100 cursor-not-allowed @endif"
                                value="{{ $email ?? old('email') }}"
-                               autofocus>
+                               @if(!empty($email)) readonly @else autofocus @endif>
                         @error('email')
                         <div class="validation validation-fail">
                             {{ $message }}

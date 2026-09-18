@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Quote Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Quote Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2022. Quote Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Factory;
@@ -16,13 +17,13 @@ use Illuminate\Support\Str;
 
 class QuoteInvitationFactory
 {
-    public static function create(int $company_id, int $user_id) :QuoteInvitation
+    public static function create(int $company_id, int $user_id): QuoteInvitation
     {
-        $qi = new QuoteInvitation;
+        $qi = new QuoteInvitation();
         $qi->company_id = $company_id;
         $qi->user_id = $user_id;
-        $qi->client_contact_id = null;
-        $qi->quote_id = null;
+        $qi->client_contact_id = null; //@phpstan-ignore-line
+        $qi->quote_id = null; //@phpstan-ignore-line
         $qi->key = Str::random(config('ninja.key_length'));
         $qi->transaction_reference = null;
         $qi->message_id = null;

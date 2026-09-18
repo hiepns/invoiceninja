@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Credit Ninja (https://creditninja.com).
  *
  * @link https://github.com/creditninja/creditninja source repository
  *
- * @copyright Copyright (c) 2020. Credit Ninja LLC (https://creditninja.com)
+ * @copyright Copyright (c) 2022. Credit Ninja LLC (https://creditninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules\Credit;
@@ -41,15 +42,15 @@ class UniqueCreditNumberRule implements Rule
      */
     public function message()
     {
-        return 'Credit number already taken';
+        return ctrans('texts.credit_number_taken');
     }
 
     /**
      * @return bool
      */
-    private function checkIfCreditNumberUnique() : bool
+    private function checkIfCreditNumberUnique(): bool
     {
-        $credit = Credit::where('client_id', $this->input['client_id'])
+        $credit = Credit::query()->where('client_id', $this->input['client_id'])
                         ->where('number', $this->input['number'])
                         ->withTrashed()
                         ->exists();

@@ -1,4 +1,4 @@
-<div x-show="open" class="fixed inset-x-0 bottom-0 px-4 pb-4 sm:inset-0 sm:flex sm:items-center sm:justify-center">
+<div x-show="open" class="fixed inset-x-0 bottom-0 px-4 pb-4 sm:inset-0 sm:flex sm:items-center sm:justify-center" style="display: none;">
     <div x-show="open" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200"
          x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
@@ -33,10 +33,10 @@
         </div>
         <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
             <div class="flex w-full rounded-md shadow-sm sm:ml-3 sm:w-auto">
-                <form action="{{ route('client.payment_methods.destroy', [$payment_method->hashed_id, 'method' => $payment_method->gateway_type->id]) }}" method="post">
+                <form action="{{ route('client.payment_methods.destroy', [$payment_method->hashed_id, 'method' => $payment_method->gateway_type_id]) }}" method="post">
                     @csrf
                     @method('DELETE')
-                    <button type="submit" class="button button-danger button-block" data-cy="confirm-payment-removal">
+                    <button type="submit" onclick="setTimeout(() => this.disabled = true, 0); return true;" class="button button-danger button-block" dusk="confirm-payment-removal">
                         {{ ctrans('texts.remove') }}
                     </button>
                 </form>

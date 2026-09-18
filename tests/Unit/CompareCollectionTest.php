@@ -1,36 +1,47 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Unit;
 
+use App\Utils\Traits\MakesHash;
 use Tests\TestCase;
 
 /**
- * @test
- * @covers  App\Utils\Number
+ *
+ *   App\Utils\Number
  */
 class CompareCollectionTest extends TestCase
 {
-    public function setUp() :void
+    use MakesHash;
+
+    public $map;
+    public $view_permission;
+    public $edit_permission;
+    public $is_admin;
+    public $is_not_admin;
+
+    protected function setUp(): void
     {
         parent::setUp();
 
         $this->map = collect([
-        ['action' => 'view_client_client_id', 'permission' => 'view_client', 'route' => 'clients.show', 'key' => 'client_id', 'name' => trans('texts.view')],
-        ['action' => 'edit_client_client_id', 'permission' => 'edit_client', 'route' => 'clients.edit', 'key' => 'client_id', 'name' => trans('texts.edit')],
-        ['action' => 'create_task_client_id', 'permission' => 'create_task', 'route' => 'task.create', 'key' => 'client_id', 'name' => trans('texts.new_task')],
-        ['action' => 'create_invoice_client_id', 'permission' => 'create_invoice', 'route' => 'invoice.create', 'key' => 'client_id', 'name' => trans('texts.new_invoice')],
-        ['action' => 'enter_payment_client_id', 'permission' => 'create_payment', 'route' => 'payment.create', 'key' => 'client_id', 'name' => trans('texts.enter_payment')],
-        ['action' => 'enter_credit_client_id', 'permission' => 'create_credit', 'route' => 'credit.create', 'key' => 'client_id', 'name' => trans('texts.enter_credit')],
-        ['action' => 'enter_expense_client_id', 'permission' => 'create_expense', 'route' => 'expense.create', 'key' => 'client_id', 'name' => trans('texts.enter_expense')],
-    ]);
+            ['action' => 'view_client_client_id', 'permission' => 'view_client', 'route' => 'clients.show', 'key' => 'client_id', 'name' => trans('texts.view')],
+            ['action' => 'edit_client_client_id', 'permission' => 'edit_client', 'route' => 'clients.edit', 'key' => 'client_id', 'name' => trans('texts.edit')],
+            ['action' => 'create_task_client_id', 'permission' => 'create_task', 'route' => 'task.create', 'key' => 'client_id', 'name' => trans('texts.new_task')],
+            ['action' => 'create_invoice_client_id', 'permission' => 'create_invoice', 'route' => 'invoice.create', 'key' => 'client_id', 'name' => trans('texts.new_invoice')],
+            ['action' => 'enter_payment_client_id', 'permission' => 'create_payment', 'route' => 'payment.create', 'key' => 'client_id', 'name' => trans('texts.enter_payment')],
+            ['action' => 'enter_credit_client_id', 'permission' => 'create_credit', 'route' => 'credit.create', 'key' => 'client_id', 'name' => trans('texts.enter_credit')],
+            ['action' => 'enter_expense_client_id', 'permission' => 'create_expense', 'route' => 'expense.create', 'key' => 'client_id', 'name' => trans('texts.enter_expense')],
+        ]);
 
         $this->view_permission = ['view_client'];
 
@@ -39,6 +50,36 @@ class CompareCollectionTest extends TestCase
         $this->is_admin = true;
 
         $this->is_not_admin = false;
+    }
+
+    public function testCollectionDistinct()
+    {
+
+        $map = collect(['abba','abba','abba']);
+
+        $this->assertCount(3, $map);
+
+        $this->assertCount(1, $map->unique());
+
+    }
+
+    public function testCollectionCreation()
+    {
+        $collection = collect();
+
+        $invoice_ids = '';
+
+        $invoices = explode(",", $invoice_ids);
+
+        if (count($invoices) >= 1) {
+            foreach ($invoices as $invoice) {
+                if (is_string($invoice) && strlen($invoice) > 1) {
+                    $collection->push($this->decodePrimaryKey($invoice));
+                }
+            }
+        }
+
+        $this->assertEquals(0, $collection->count());
     }
 
     public function testCompareResultOfComparison()

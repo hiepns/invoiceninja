@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Jobs\Util;
@@ -22,7 +23,10 @@ use Illuminate\Queue\SerializesModels;
 
 class SendFailedEmails implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     /**
      * Create a new job instance.
@@ -63,8 +67,8 @@ class SendFailedEmails implements ShouldQueue
             $invitation = $job_meta_array['entity_name']::where('key', $job_meta_array['invitation_key'])->with('contact')->first();
 
             if ($invitation->invoice) {
-                if ($invitation->contact->send_email && $invitation->contact->email) {
-                    EmailEntity::dispatch($invitation, $invitation->company, $job_meta_array['reminder_template']);
+                if (! $invitation->contact->trashed() && $invitation->contact->send_email && $invitation->contact->email && !$invitation->contact->is_locked) {
+                    EmailEntity::dispatch($invitation->withoutRelations(), $invitation->company->db, $job_meta_array['reminder_template']);
                 }
             }
         });

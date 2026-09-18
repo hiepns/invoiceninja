@@ -1,30 +1,23 @@
 @component('email.template.master', ['design' => 'light', 'settings' => $settings, 'whitelabel' => $whitelabel])
 
 @slot('header')
-    @component('email.components.header', ['p' => $body, 'logo' => $settings->company_logo ?: 'https://www.invoiceninja.com/wp-content/uploads/2019/01/InvoiceNinja-Logo-Round-300x300.png'])
-        
-        @if(isset($title))
-            {{$title}}
-        @endif
-
-    @endcomponent
-
-
-    @if($footer)
-        @component('email.components.button', ['url' => $view_link])
-            {{$view_text}}
-        @endcomponent
-    @endif
-
-
+    @include('email.components.header', ['logo' => $company->present()->logo($settings), 'company_name' => $company->present()->name()])
 @endslot
 
-@slot('below_card')
+{!! $body !!}
 
-    @if($signature)
-        {{ $signature }}
-    @endif
+@if($signature)
+<br>
+<br>
+<p>{!! nl2br($signature) !!}</p>
+@endif
 
-@endslot    
+@isset($email_preferences)
+<p>
+    <a href="{{ $email_preferences }}">
+        {{ ctrans('texts.email_preferences') }}
+    </a>
+</p>
+@endisset
 
 @endcomponent

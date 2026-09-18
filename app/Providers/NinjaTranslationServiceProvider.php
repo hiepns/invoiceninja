@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Providers;
@@ -18,7 +19,6 @@ class NinjaTranslationServiceProvider extends TranslationServiceProvider
 {
     public function boot()
     {
-
         /*
          * To reset the translator instance we call
          *
@@ -33,6 +33,7 @@ class NinjaTranslationServiceProvider extends TranslationServiceProvider
          *
          */
 
+        //this is not octane safe
         $this->app->singleton('translator', function ($app) {
             $loader = $app['translation.loader'];
             $locale = $app['config']['app.locale'];

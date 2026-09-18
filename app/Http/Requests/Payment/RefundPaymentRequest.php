@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\Payment;
@@ -16,6 +17,7 @@ use App\Http\ValidationRules\Payment\ValidRefundableRequest;
 use App\Http\ValidationRules\ValidRefundableInvoices;
 use App\Models\Payment;
 use App\Utils\Traits\MakesHash;
+use Illuminate\Validation\Rule;
 
 class RefundPaymentRequest extends Request
 {
@@ -26,12 +28,14 @@ class RefundPaymentRequest extends Request
      *
      * @return bool
      */
-    public function authorize() : bool
+    public function authorize(): bool
     {
-        return auth()->user()->isAdmin();
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+        return $user->isAdmin();
     }
 
-    protected function prepareForValidation()
+    public function prepareForValidation()
     {
         $input = $this->all();
 
@@ -50,39 +54,38 @@ class RefundPaymentRequest extends Request
         if (isset($input['invoices'])) {
             foreach ($input['invoices'] as $key => $invoice) {
                 $input['invoices'][$key]['invoice_id'] = $this->decodePrimaryKey($invoice['invoice_id']);
+                $input['invoices'][$key]['date'] = now()->format('Y-m-d');
             }
         }
 
         if (isset($input['credits'])) {
             unset($input['credits']);
-            // foreach($input['credits'] as $key => $credit)
-           //     $input['credits'][$key]['credit_id'] = $this->decodePrimaryKey($credit['credit_id']);
         }
 
         $this->replace($input);
     }
 
-    public function rules()
+    public function rules(): array
     {
         $input = $this->all();
 
         $rules = [
-            'id' => 'bail|required',
-            'id' => new ValidRefundableRequest($input),
-            'amount' => 'numeric',
+            'id' => ['bail','required', new ValidRefundableRequest($input)],
+            'amount' => ['numeric', 'max:99999999999999', 'gt:0'],
             'date' => 'required',
-            'invoices.*.invoice_id' => 'required',
-            'invoices.*.amount' => 'required',
-            'invoices' => new ValidRefundableInvoices($input),
+            'invoices.*.invoice_id' => ['required','bail','distinct', Rule::exists('invoices', 'id')->where('company_id', auth()->user()->company()->id)],
+            'invoices.*.amount' => 'required|bail|numeric|gt:0',
+            'invoices' => ['sometimes','array', new ValidRefundableInvoices($input)],
+            
         ];
 
         return $rules;
     }
 
-    public function payment() :?Payment
+    public function payment(): ?\App\Models\Payment
     {
         $input = $this->all();
-
-        return Payment::whereId($input['id'])->first();
+        /** @var \App\Models\Payment */
+        return Payment::withTrashed()->where('id', $input['id'])->where('company_id', auth()->user()->company()->id)->first();
     }
 }

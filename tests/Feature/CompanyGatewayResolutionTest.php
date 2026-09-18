@@ -1,17 +1,20 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\CompanyGateway;
+use App\Models\Credit;
 use App\Models\GatewayType;
 use App\Utils\Traits\MakesHash;
 use Illuminate\Database\Eloquent\Model;
@@ -21,7 +24,7 @@ use Tests\MockAccountData;
 use Tests\TestCase;
 
 /**
- * @test
+ *
  */
 class CompanyGatewayResolutionTest extends TestCase
 {
@@ -33,7 +36,7 @@ class CompanyGatewayResolutionTest extends TestCase
 
     public $cg1;
 
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -44,14 +47,109 @@ class CompanyGatewayResolutionTest extends TestCase
         if (! config('ninja.testvars.stripe')) {
             $this->markTestSkipped('Skip test no company gateways installed');
         }
-
-        $this->faker = \Faker\Factory::create();
-
         Model::reguard();
 
         $this->makeTestData();
 
         $this->withoutExceptionHandling();
+
+        CompanyGateway::query()->withTrashed()->cursor()->each(function ($cg) {
+            $cg->forceDelete();
+        });
+
+        $data = [];
+        $data[1]['min_limit'] = -1;
+        $data[1]['max_limit'] = -1;
+        $data[1]['fee_amount'] = 0.00;
+        $data[1]['fee_percent'] = 2;
+        $data[1]['fee_tax_name1'] = 'GST';
+        $data[1]['fee_tax_rate1'] = 10;
+        $data[1]['fee_tax_name2'] = 'GST';
+        $data[1]['fee_tax_rate2'] = 10;
+        $data[1]['fee_tax_name3'] = 'GST';
+        $data[1]['fee_tax_rate3'] = 10;
+        $data[1]['adjust_fee_percent'] = false;
+        $data[1]['fee_cap'] = 0;
+        $data[1]['is_enabled'] = true;
+
+        $data[2]['min_limit'] = -1;
+        $data[2]['max_limit'] = -1;
+        $data[2]['fee_amount'] = 0.00;
+        $data[2]['fee_percent'] = 1;
+        $data[2]['fee_tax_name1'] = 'GST';
+        $data[2]['fee_tax_rate1'] = 10;
+        $data[2]['fee_tax_name2'] = 'GST';
+        $data[2]['fee_tax_rate2'] = 10;
+        $data[2]['fee_tax_name3'] = 'GST';
+        $data[2]['fee_tax_rate3'] = 10;
+        $data[2]['adjust_fee_percent'] = false;
+        $data[2]['fee_cap'] = 0;
+        $data[2]['is_enabled'] = true;
+
+        //disable ach here
+        $json_config = json_decode(config('ninja.testvars.stripe'));
+
+        $this->cg = new CompanyGateway();
+        $this->cg->company_id = $this->company->id;
+        $this->cg->user_id = $this->user->id;
+        $this->cg->gateway_key = 'd14dd26a37cecc30fdd65700bfb55b23';
+        $this->cg->require_cvv = true;
+        $this->cg->require_billing_address = true;
+        $this->cg->require_shipping_address = true;
+        $this->cg->update_details = true;
+        $this->cg->config = encrypt(json_encode($json_config));
+        $this->cg->fees_and_limits = $data;
+        $this->cg->save();
+    }
+
+    /**
+     *  \App\Models\CompanyGateway::calcGatewayFee()
+     */
+    public function testGatewayResolution()
+    {
+        $fee = $this->cg->calcGatewayFee(10, GatewayType::CREDIT_CARD, false);
+        $this->assertEquals(0.2, $fee);
+    }
+
+    /**
+     *  \App|Models\Client::validGatewayForAmount()
+     */
+    public function testValidationForGatewayAmount()
+    {
+        $this->assertTrue($this->client->validGatewayForAmount($this->cg->fees_and_limits->{1}, 10));
+        $this->assertTrue($this->client->validGatewayForAmount($this->cg->fees_and_limits->{2}, 10));
+    }
+
+    public function testAvailablePaymentMethodsCount()
+    {
+        $amount = 10;
+
+        $this->client->country_id = 840;
+        $this->client->save();
+
+        Credit::query()->withTrashed()->cursor()->each(function ($c) {
+            $c->forceDelete();
+        });
+
+        $this->assertInstanceOf('\\stdClass', $this->cg->fees_and_limits);
+        $this->assertNotNull($this->cg->fees_and_limits->{1}->min_limit);
+        $payment_methods = $this->client->service()->getPaymentMethods($amount);
+
+
+        $this->assertEquals(2, count($payment_methods));
+    }
+
+    public function testRemoveMethods()
+    {
+        $amount = 10;
+
+        CompanyGateway::query()->withTrashed()->cursor()->each(function ($cg) {
+            $cg->forceDelete();
+        });
+
+        Credit::query()->withTrashed()->cursor()->each(function ($c) {
+            $c->forceDelete();
+        });
 
         $data = [];
         $data[1]['min_limit'] = -1;
@@ -66,6 +164,7 @@ class CompanyGatewayResolutionTest extends TestCase
         $data[1]['fee_tax_rate3'] = 10;
         $data[1]['adjust_fee_percent'] = true;
         $data[1]['fee_cap'] = 0;
+        $data[1]['is_enabled'] = true;
 
         $data[2]['min_limit'] = -1;
         $data[2]['max_limit'] = -1;
@@ -79,12 +178,12 @@ class CompanyGatewayResolutionTest extends TestCase
         $data[2]['fee_tax_rate3'] = 10;
         $data[2]['adjust_fee_percent'] = true;
         $data[2]['fee_cap'] = 0;
+        $data[2]['is_enabled'] = false;
 
         //disable ach here
         $json_config = json_decode(config('ninja.testvars.stripe'));
-        $json_config->enable_ach = "0";
 
-        $this->cg = new CompanyGateway;
+        $this->cg = new CompanyGateway();
         $this->cg->company_id = $this->company->id;
         $this->cg->user_id = $this->user->id;
         $this->cg->gateway_key = 'd14dd26a37cecc30fdd65700bfb55b23';
@@ -95,61 +194,60 @@ class CompanyGatewayResolutionTest extends TestCase
         $this->cg->config = encrypt(json_encode($json_config));
         $this->cg->fees_and_limits = $data;
         $this->cg->save();
+
+        $this->client->country_id = 840;
+        $this->client->save();
+
+        $this->assertEquals(1, count($this->client->service()->getPaymentMethods($amount)));
     }
 
-    /**
-     * @covers \App\Models\CompanyGateway::calcGatewayFee()
-     */
-    public function testGatewayResolution()
+    public function testEnableFeeAdjustment()
     {
-        $fee = $this->cg->calcGatewayFee(10, false, GatewayType::CREDIT_CARD);
-        $this->assertEquals(0.2, $fee);
-        $fee = $this->cg->calcGatewayFee(10, false, GatewayType::BANK_TRANSFER);
-        $this->assertEquals(0.1, $fee);
-    }
+        $data = [];
+        $data[1]['min_limit'] = -1;
+        $data[1]['max_limit'] = -1;
+        $data[1]['fee_amount'] = 0.3;
+        $data[1]['fee_percent'] = 1.75;
+        $data[1]['fee_tax_name1'] = '';
+        $data[1]['fee_tax_rate1'] = 0;
+        $data[1]['fee_tax_name2'] = '';
+        $data[1]['fee_tax_rate2'] = 0;
+        $data[1]['fee_tax_name3'] = '';
+        $data[1]['fee_tax_rate3'] = 0;
+        $data[1]['adjust_fee_percent'] = true;
+        $data[1]['fee_cap'] = 0;
+        $data[1]['is_enabled'] = true;
 
-    /**
-     * @covers \App|Models\Client::validGatewayForAmount()
-     */
+        $data[2]['min_limit'] = -1;
+        $data[2]['max_limit'] = -1;
+        $data[2]['fee_amount'] = 0.30;
+        $data[2]['fee_percent'] = 1.75;
+        $data[2]['fee_tax_name1'] = '';
+        $data[2]['fee_tax_rate1'] = 0;
+        $data[2]['fee_tax_name2'] = '';
+        $data[2]['fee_tax_rate2'] = 0;
+        $data[2]['fee_tax_name3'] = '';
+        $data[2]['fee_tax_rate3'] = 0;
+        $data[2]['adjust_fee_percent'] = true;
+        $data[2]['fee_cap'] = 0;
+        $data[2]['is_enabled'] = true;
 
-    public function testValidationForGatewayAmount()
-    {
-        $this->assertTrue($this->client->validGatewayForAmount($this->cg->fees_and_limits->{1}, 10));
-        $this->assertTrue($this->client->validGatewayForAmount($this->cg->fees_and_limits->{2}, 10));
-    }
+        //disable ach here
+        $json_config = json_decode(config('ninja.testvars.stripe'));
 
-    public function testAvailablePaymentMethodsCount()
-    {
-        $amount = 10;
-        $payment_methods = [];
-
-        $this->assertInstanceOf("\\stdClass", $this->cg->fees_and_limits);
-        $this->assertObjectHasAttribute('min_limit', $this->cg->fees_and_limits->{1});
-
-        foreach ($this->cg->driver($this->client)->gatewayTypes() as $type) {
-            if (property_exists($this->cg->fees_and_limits, $type)) {
-                if ($this->client->validGatewayForAmount($this->cg->fees_and_limits->{$type}, $amount)) {
-                    $payment_methods[] = [$this->cg->id => $type];
-                }
-            } else {
-                $payment_methods[] = [$this->cg->id => $type];
-            }
-        }
-
-        $this->assertEquals(3, count($payment_methods));
-    }
-
-    public function testAddAchBackIntoMethods()
-    {
-        $this->assertEquals(3, count($this->cg->driver($this->client)->gatewayTypes()));
-
-        $cg_config = json_decode(decrypt($this->cg->config));
-        $cg_config->enable_ach = "1";
-        $this->cg->config = encrypt(json_encode($cg_config));
+        $this->cg = new CompanyGateway();
+        $this->cg->company_id = $this->company->id;
+        $this->cg->user_id = $this->user->id;
+        $this->cg->gateway_key = 'd14dd26a37cecc30fdd65700bfb55b23';
+        $this->cg->require_cvv = true;
+        $this->cg->require_billing_address = true;
+        $this->cg->require_shipping_address = true;
+        $this->cg->update_details = true;
+        $this->cg->config = encrypt(json_encode($json_config));
+        $this->cg->fees_and_limits = $data;
         $this->cg->save();
 
-        $this->assertEquals(4, count($this->cg->driver($this->client)->gatewayTypes()));
-
-        // info(print_r($this->client->getPaymentMethods(10),1));
+        $fee = $this->cg->calcGatewayFee(89, GatewayType::CREDIT_CARD, false);
+        $this->assertEquals(1.89, round($fee, 2));
     }
 }

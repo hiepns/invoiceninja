@@ -1,10 +1,17 @@
 <?php
-
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
 namespace App\Listeners\Document;
 
 use App\Libraries\MultiDB;
 use App\Models\Document;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
 
 class DeleteCompanyDocuments
@@ -22,19 +29,15 @@ class DeleteCompanyDocuments
     /**
      * Handle the event.
      *
-     * @param CompanyWasDeleted $event
+     * @param $event
      * @return void
      */
     public function handle($event)
     {
         MultiDB::setDb($event->company->db);
 
-        $path = sprintf('%s/%s', storage_path('app/public'), $event->company->company_key);
+        $path = sprintf('%s/%s', public_path('storage'), $event->company->company_key);
 
-        // Remove all files & folders, under company's path.
-        // This will delete directory itself, as well.
-        // In case we want to remove the content of folder, we should use $fs->cleanDirectory();
-        //$filesystem = new Filesystem();
         Storage::deleteDirectory($event->company->company_key);
 
         Document::whereCompanyId($event->company->id)->delete();

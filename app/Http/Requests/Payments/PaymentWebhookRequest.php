@@ -1,23 +1,29 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
-
 
 namespace App\Http\Requests\Payments;
 
 use App\Http\Requests\Request;
+use App\Libraries\MultiDB;
 use App\Models\Company;
 use App\Models\CompanyGateway;
+use App\Models\Payment;
+use App\Models\PaymentHash;
+use App\Utils\Traits\MakesHash;
 
 class PaymentWebhookRequest extends Request
 {
+    use MakesHash;
+
     public function authorize()
     {
         return true;
@@ -30,28 +36,46 @@ class PaymentWebhookRequest extends Request
         ];
     }
 
-    public function company()
+    /**
+     * Resolve company gateway.
+     *
+     * @return null|\App\Models\CompanyGateway
+     */
+    public function getCompanyGateway()
     {
-        if (! $this->company_key) {
-            return false;
-        }
+        MultiDB::findAndSetDbByCompanyKey($this->company_key);
 
-        return Company::query()
-            ->where('company_key', $this->company_key)
-            ->firstOrFail();
+        /** @var \App\Models\CompanyGateway */
+        return CompanyGateway::withTrashed()->where('id', $this->decodePrimaryKey($this->company_gateway_id))->where('is_deleted', 0)->first();
     }
 
-    public function companyGateway()
+    /**
+     * Resolve payment hash.
+     *
+     * @return null|bool|\App\Models\PaymentHash
+     */
+    public function getPaymentHash()
     {
-        if (! $this->gateway_key || ! $this->company_key) {
-            return false;
+        if ($this->query('hash')) {
+            MultiDB::findAndSetDbByCompanyKey($this->company_key);
+
+            /** @var \App\Models\PaymentHash */
+            return PaymentHash::where('hash', $this->query('hash'))->firstOrFail();
         }
 
-        $company = $this->company();
+        return false;
+    }
 
-        return CompanyGateway::query()
-            ->where('gateway_key', $this->gateway_key)
-            ->where('company_id', $company->id)
-            ->firstOrFail();
+    /**
+     * Resolve company from company_key parameter.
+     *
+     * @return null|\App\Models\Company
+     */
+    public function getCompany(): ?Company
+    {
+        MultiDB::findAndSetDbByCompanyKey($this->company_key);
+
+        /** @var \App\Models\Company */
+        return Company::where('company_key', $this->company_key)->firstOrFail();
     }
 }

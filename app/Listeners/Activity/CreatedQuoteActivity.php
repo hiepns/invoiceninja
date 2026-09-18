@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Listeners\Activity;
@@ -41,11 +42,13 @@ class CreatedQuoteActivity implements ShouldQueue
     {
         MultiDB::setDb($event->company->db);
 
-        $fields = new stdClass;
+        $fields = new stdClass();
+
+        $user_id = $event->event_vars['user_id'] ?? $event->quote->user_id;
 
         $fields->quote_id = $event->quote->id;
         $fields->client_id = $event->quote->client_id;
-        $fields->user_id = $event->quote->user_id;
+        $fields->user_id = $user_id;
         $fields->company_id = $event->quote->company_id;
         $fields->activity_type_id = Activity::CREATE_QUOTE;
 

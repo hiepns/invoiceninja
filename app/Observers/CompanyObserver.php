@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Observers;
@@ -23,17 +24,6 @@ class CompanyObserver
      * @return void
      */
     public function created(Company $company)
-    {
-        //
-    }
-
-    /**
-     * Handle the company "updated" event.
-     *
-     * @param Company $company
-     * @return void
-     */
-    public function updated(Company $company)
     {
         //
     }
@@ -70,4 +60,5 @@ class CompanyObserver
     {
         //
     }
+
 }

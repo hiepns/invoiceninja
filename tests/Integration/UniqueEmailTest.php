@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Integration;
 
 use App\Http\ValidationRules\NewUniqueUserRule;
@@ -20,8 +22,8 @@ use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 /**
- * @test
- * @covers  App\Http\ValidationRules\NewUniqueUserRule
+ *
+ *   App\Http\ValidationRules\NewUniqueUserRule
  */
 class UniqueEmailTest extends TestCase
 {
@@ -29,7 +31,7 @@ class UniqueEmailTest extends TestCase
 
     protected $rule;
 
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -68,25 +70,25 @@ class UniqueEmailTest extends TestCase
 
         $user = [
             'first_name' => 'user_db_1',
-            'email' => 'user@example.com',
+            'email' => 'user@gmail.com',
             'password' => Hash::make('password'),
             'account_id' => $account->id,
         ];
 
         $user2 = [
             'first_name' => 'user_db_2',
-            'email' => 'user@example.com',
+            'email' => 'user@gmail.com',
             'password' => Hash::make('password'),
             'account_id' => $account2->id,
         ];
 
-        $user_find = User::on('db-ninja-01')->where('email', 'user@example.com')->first();
+        $user_find = User::on('db-ninja-01')->where('email', 'user@gmail.com')->first();
 
         if (! $user_find) {
             User::on('db-ninja-01')->create($user);
         }
 
-        $user_find = User::on('db-ninja-02')->where('email', 'user@example.com')->first();
+        $user_find = User::on('db-ninja-02')->where('email', 'user@gmail.com')->first();
 
         if (! $user_find) {
             User::on('db-ninja-02')->create($user2);
@@ -95,17 +97,22 @@ class UniqueEmailTest extends TestCase
 
     public function test_unique_emails_detected_on_database()
     {
-        $this->assertFalse($this->rule->passes('email', 'user@example.com'));
+        $this->assertFalse($this->rule->passes('email', 'user@gmail.com'));
     }
 
     public function test_no_unique_emails_detected()
     {
-        $this->assertTrue($this->rule->passes('email', 'nohit@example.com'));
+        $this->assertTrue($this->rule->passes('email', 'nohit@gmail.com'));
     }
 
-    public function tearDown() :void
+    protected function tearDown(): void
     {
+
+
         DB::connection('db-ninja-01')->table('users')->delete();
         DB::connection('db-ninja-02')->table('users')->delete();
+
+        parent::tearDown();
+
     }
 }

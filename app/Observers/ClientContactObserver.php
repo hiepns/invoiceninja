@@ -1,17 +1,22 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Observers;
 
 use App\Models\ClientContact;
+use App\Models\CreditInvitation;
+use App\Models\InvoiceInvitation;
+use App\Models\QuoteInvitation;
+use App\Models\RecurringInvoiceInvitation;
 
 class ClientContactObserver
 {
@@ -45,9 +50,39 @@ class ClientContactObserver
      */
     public function deleted(ClientContact $clientContact)
     {
+        $client_contact_id = $clientContact->id;
+
         $clientContact->invoice_invitations()->delete();
         $clientContact->quote_invitations()->delete();
         $clientContact->credit_invitations()->delete();
+        $clientContact->recurring_invoice_invitations()->delete();
+
+        //ensure entity state is preserved
+
+        InvoiceInvitation::withTrashed()->where('client_contact_id', $client_contact_id)->cursor()->each(function ($invite) {
+            /** @var \App\Models\InvoiceInvitation $invite */
+            if ($invite->invoice && $invite->invoice->invitations()->doesntExist()) {
+                $invite->invoice->service()->createInvitations();
+            }
+        });
+
+        QuoteInvitation::withTrashed()->where('client_contact_id', $client_contact_id)->cursor()->each(function ($invite) {
+            if ($invite->quote && $invite->quote->invitations()->doesntExist()) {
+                $invite->quote->service()->createInvitations();
+            }
+        });
+
+        RecurringInvoiceInvitation::withTrashed()->where('client_contact_id', $client_contact_id)->cursor()->each(function ($invite) {
+            if ($invite->recurring_invoice && $invite->recurring_invoice->invitations()->doesntExist()) {
+                $invite->recurring_invoice->service()->createInvitations();
+            }
+        });
+
+        CreditInvitation::withTrashed()->where('client_contact_id', $client_contact_id)->cursor()->each(function ($invite) {
+            if ($invite->credit && $invite->credit->invitations()->doesntExist()) {
+                $invite->credit->service()->createInvitations();
+            }
+        });
     }
 
     /**
@@ -56,12 +91,7 @@ class ClientContactObserver
      * @param ClientContact $clientContact
      * @return void
      */
-    public function restored(ClientContact $clientContact)
-    {
-        $clientContact->invoice_invitations()->restore();
-        $clientContact->quote_invitations()->restore();
-        $clientContact->credit_invitations()->restore();
-    }
+    public function restored(ClientContact $clientContact) {}
 
     /**
      * Handle the client contact "force deleted" event.

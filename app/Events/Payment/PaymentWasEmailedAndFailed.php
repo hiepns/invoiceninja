@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Events\Payment;
@@ -22,7 +23,9 @@ use Illuminate\Queue\SerializesModels;
  */
 class PaymentWasEmailedAndFailed
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use Dispatchable;
+    use InteractsWithSockets;
+    use SerializesModels;
 
     /**
      * @var Payment
@@ -39,10 +42,10 @@ class PaymentWasEmailedAndFailed
      * PaymentWasEmailedAndFailed constructor.
      * @param Payment $payment
      * @param $company
-     * @param array $errors
+     * @param string $errors
      * @param array $event_vars
      */
-    public function __construct(Payment $payment, Company $company, array $errors, array $event_vars)
+    public function __construct(Payment $payment, Company $company, string $errors, array $event_vars)
     {
         $this->payment = $payment;
 

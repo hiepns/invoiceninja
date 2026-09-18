@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Utils\Traits;
@@ -22,7 +23,7 @@ trait UserSettings
      * @param string $entity
      * @return stdClass
      */
-    public function getEntity(string $entity) : stdClass
+    public function getEntity(string $entity): stdClass
     {
         return $this->settings()->{$entity};
     }
@@ -31,7 +32,7 @@ trait UserSettings
      * @param string $entity
      * @return stdClass
      */
-    public function getColumnVisibility(string $entity) : stdClass
+    public function getColumnVisibility(string $entity): stdClass
     {
         return $this->settings()->{class_basename($entity)}->datatable->column_visibility;
     }

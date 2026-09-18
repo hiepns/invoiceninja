@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Integration\PaymentDrivers;
 
 use net\authorize\api\contract\v1 as AnetAPI;
@@ -33,7 +35,7 @@ use Tests\MockAccountData;
 use Tests\TestCase;
 
 /**
- * @test
+ *
  */
 class AuthorizeTest extends TestCase
 {
@@ -43,15 +45,13 @@ class AuthorizeTest extends TestCase
 
     public $customer_payment_profile = 1512424103;
 
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
         if (! config('ninja.testvars.authorize')) {
             $this->markTestSkipped('authorize.net not configured');
         }
-
-        $this->makeTestData();
     }
 
     public function testUnpackingVars()
@@ -100,12 +100,12 @@ class AuthorizeTest extends TestCase
         $controller = new GetCustomerProfileIdsController($request);
         $response = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
         if (($response != null) && ($response->getMessages()->getResultCode() == 'Ok')) {
-            // info("GetCustomerProfileId's SUCCESS: "."\n");
-            // info(print_r($response->getIds(), 1));
+            // nlog("GetCustomerProfileId's SUCCESS: "."\n");
+            // nlog(print_r($response->getIds(), 1));
         } else {
-            // info("GetCustomerProfileId's ERROR :  Invalid response\n");
+            // nlog("GetCustomerProfileId's ERROR :  Invalid response\n");
             $errorMessages = $response->getMessages()->getMessage();
-            // info('Response : '.$errorMessages[0]->getCode().'  '.$errorMessages[0]->getText()."\n");
+            // nlog('Response : '.$errorMessages[0]->getCode().'  '.$errorMessages[0]->getText()."\n");
         }
 
         $this->assertNotNull($response);
@@ -171,16 +171,16 @@ class AuthorizeTest extends TestCase
         $response = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
 
         if (($response != null) && ($response->getMessages()->getResultCode() == 'Ok')) {
-            info('Succesfully created customer profile : '.$response->getCustomerProfileId()."\n");
+            // nlog('Succesfully created customer profile : '.$response->getCustomerProfileId()."\n");
             $paymentProfiles = $response->getCustomerPaymentProfileIdList();
-        // info(print_r($paymentProfiles, 1));
+            // nlog(print_r($paymentProfiles, 1));
         } else {
-            info("ERROR :  Invalid response\n");
+            // nlog("ERROR :  Invalid response\n");
             $errorMessages = $response->getMessages()->getMessage();
-            // info('Response : '.$errorMessages[0]->getCode().'  '.$errorMessages[0]->getText()."\n");
+            // nlog('Response : '.$errorMessages[0]->getCode().'  '.$errorMessages[0]->getText()."\n");
         }
 
-        // info('the new customer profile id = '.$response->getCustomerProfileId());
+        // nlog('the new customer profile id = '.$response->getCustomerProfileId());
 
         $this->assertNotNull($response);
     }
@@ -202,10 +202,10 @@ class AuthorizeTest extends TestCase
         $response = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
 
         if (($response != null) && ($response->getMessages()->getResultCode() == 'Ok')) {
-            // info('got profile');
-            // info(print_r($response->getProfile(), 1));
+            // nlog('got profile');
+            // nlog(print_r($response->getProfile(), 1));
         } else {
-            info("ERROR :  Invalid response\n");
+            nlog("ERROR :  Invalid response\n");
         }
 
         $this->assertNotNull($response);
@@ -213,7 +213,7 @@ class AuthorizeTest extends TestCase
 
     public function testCreateCustomerPaymentProfile()
     {
-        info('test create customer payment profile');
+        nlog('test create customer payment profile');
 
         error_reporting(E_ALL & ~E_DEPRECATED);
 
@@ -270,11 +270,11 @@ class AuthorizeTest extends TestCase
         $response = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
 
         if (($response != null) && ($response->getMessages()->getResultCode() == 'Ok')) {
-            //   info('Create Customer Payment Profile SUCCESS: '.$response->getCustomerPaymentProfileId()."\n");
+            //   nlog('Create Customer Payment Profile SUCCESS: '.$response->getCustomerPaymentProfileId()."\n");
         } else {
-            //    info("Create Customer Payment Profile: ERROR Invalid response\n");
+            //    nlog("Create Customer Payment Profile: ERROR Invalid response\n");
             $errorMessages = $response->getMessages()->getMessage();
-            //    info('Response : '.$errorMessages[0]->getCode().'  '.$errorMessages[0]->getText()."\n");
+            //    nlog('Response : '.$errorMessages[0]->getCode().'  '.$errorMessages[0]->getText()."\n");
         }
 
         $this->assertNotNull($response);
@@ -311,37 +311,58 @@ class AuthorizeTest extends TestCase
         $controller = new CreateTransactionController($request);
         $response = $controller->executeWithApiResponse(\net\authorize\api\constants\ANetEnvironment::SANDBOX);
 
+        // nlog($response);
+        // nlog($response->getTransactionResponse()->getMessages() !== null);
+        // nlog($response->getTransactionResponse()->getMessages());
+        // nlog($response->getTransactionResponse()->getMessages()[0]);
+        //nlog($response->getTransactionResponse()->getMessages()[0]->getCode());
+
+        $code = '';
+        $description = '';
+
+        if ($response->getTransactionResponse()->getMessages() !== null) {
+            $code = $response->getTransactionResponse()->getMessages()[0]->getCode();
+            $description = $response->getTransactionResponse()->getMessages()[0]->getDescription();
+        }
+
+        $log = [
+            'transaction_reference' => $response->getTransactionResponse()->getTransId(),
+            'auth_code' => $response->getTransactionResponse()->getAuthCode(),
+            'code' => $code,
+            'description' => $description,
+        ];
+
         if ($response != null) {
             if ($response->getMessages()->getResultCode() == 'Ok') {
                 $tresponse = $response->getTransactionResponse();
 
                 if ($tresponse != null && $tresponse->getMessages() != null) {
-                    info(' Transaction Response code : '.$tresponse->getResponseCode()."\n");
-                    info('Charge Customer Profile APPROVED  :'."\n");
-                    info(' Charge Customer Profile AUTH CODE : '.$tresponse->getAuthCode()."\n");
-                    info(' Charge Customer Profile TRANS ID  : '.$tresponse->getTransId()."\n");
-                    info(' Code : '.$tresponse->getMessages()[0]->getCode()."\n");
-                    info(' Description : '.$tresponse->getMessages()[0]->getDescription()."\n");
+                    // nlog(' Transaction Response code : '.$tresponse->getResponseCode()."\n");
+                    // nlog('Charge Customer Profile APPROVED  :'."\n");
+                    // nlog(' Charge Customer Profile AUTH CODE : '.$tresponse->getAuthCode()."\n");
+                    // nlog(' Charge Customer Profile TRANS ID  : '.$tresponse->getTransId()."\n");
+                    // nlog(' Code : '.$tresponse->getMessages()[0]->getCode()."\n");
+                    // nlog(' Description : '.$tresponse->getMessages()[0]->getDescription()."\n");
                 } else {
-                    info("Transaction Failed \n");
+                    // nlog("Transaction Failed \n");
                     if ($tresponse->getErrors() != null) {
-                        info(' Error code  : '.$tresponse->getErrors()[0]->getErrorCode()."\n");
-                        info(' Error message : '.$tresponse->getErrors()[0]->getErrorText()."\n");
+                        // nlog(' Error code  : '.$tresponse->getErrors()[0]->getErrorCode()."\n");
+                        // nlog(' Error message : '.$tresponse->getErrors()[0]->getErrorText()."\n");
                     }
                 }
             } else {
-                info("Transaction Failed \n");
+                // nlog("Transaction Failed \n");
                 $tresponse = $response->getTransactionResponse();
                 if ($tresponse != null && $tresponse->getErrors() != null) {
-                    info(' Error code  : '.$tresponse->getErrors()[0]->getErrorCode()."\n");
-                    info(' Error message : '.$tresponse->getErrors()[0]->getErrorText()."\n");
+                    // nlog(' Error code  : '.$tresponse->getErrors()[0]->getErrorCode()."\n");
+                    // nlog(' Error message : '.$tresponse->getErrors()[0]->getErrorText()."\n");
                 } else {
-                    info(' Error code  : '.$response->getMessages()->getMessage()[0]->getCode()."\n");
-                    info(' Error message : '.$response->getMessages()->getMessage()[0]->getText()."\n");
+                    // nlog(' Error code  : '.$response->getMessages()->getMessage()[0]->getCode()."\n");
+                    // nlog(' Error message : '.$response->getMessages()->getMessage()[0]->getText()."\n");
                 }
             }
         } else {
-            info("No response returned \n");
+            // nlog("No response returned \n");
         }
 
         $this->assertNotNull($response);

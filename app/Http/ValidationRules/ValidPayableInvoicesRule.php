@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules;
@@ -35,12 +36,12 @@ class ValidPayableInvoicesRule implements Rule
         $invoices = [];
 
         if (is_array($value)) {
-            $invoices = Invoice::whereIn('id', array_column($value, 'invoice_id'))->company()->get();
+            $invoices = Invoice::query()->withTrashed()->whereIn('id', array_column($value, 'invoice_id'))->company()->get();
         }
 
         foreach ($invoices as $invoice) {
             if (! $invoice->isPayable()) {
-                $this->error_msg = 'One or more of these invoices have been paid';
+                $this->error_msg = ctrans('texts.one_or_more_invoices_paid');
 
                 return false;
             }

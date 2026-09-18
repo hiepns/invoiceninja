@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\DataMapper;
@@ -37,9 +38,12 @@ class FeesAndLimits
 
     public $adjust_fee_percent = false;
 
+    public $is_enabled = true;
+
     //public $gateway_type_id = 1;
 
     public static $casts = [
+        'is_enabled' => 'bool',
         'gateway_type_id' => 'int',
         'min_limit' => 'float',
         'max_limit' => 'float',

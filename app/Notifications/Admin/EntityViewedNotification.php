@@ -1,30 +1,23 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Notifications\Admin;
 
 use App\Utils\Number;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Messages\SlackMessage;
 use Illuminate\Notifications\Notification;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
 
-class EntityViewedNotification extends Notification implements ShouldQueue
+class EntityViewedNotification extends Notification
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
     /**
      * Create a new notification instance.
      *
@@ -44,6 +37,8 @@ class EntityViewedNotification extends Notification implements ShouldQueue
     public $method;
 
     protected $contact;
+
+    public $is_system;
 
     public function __construct($invitation, $entity_name, $is_system = false, $settings = null)
     {
@@ -72,22 +67,9 @@ class EntityViewedNotification extends Notification implements ShouldQueue
      * Get the mail representation of the notification.
      *
      * @param  mixed  $notifiable
-     * @return MailMessage
+     *
      */
-    public function toMail($notifiable)
-    {
-        //@TODO THESE ARE @DEPRECATED NOW we are now using app/Mail/Admin/*
-
-        $data = $this->buildDataArray();
-        $subject = $this->buildSubject();
-
-        return (new MailMessage)
-                    ->subject($subject)
-                    ->markdown('email.admin.generic', $data)
-                    ->withSwiftMessage(function ($message) {
-                        $message->getHeaders()->addTextHeader('Tag', $this->company->company_key);
-                    });
-    }
+    public function toMail($notifiable) {}
 
     /**
      * Get the array representation of the notification.
@@ -107,7 +89,7 @@ class EntityViewedNotification extends Notification implements ShouldQueue
         $logo = $this->company->present()->logo();
         $amount = Number::formatMoney($this->entity->amount, $this->entity->client);
 
-        return (new SlackMessage)
+        return (new SlackMessage())
             ->from(ctrans('texts.notification_bot'))
             ->success()
             ->image('https://app.invoiceninja.com/favicon-v2.png')
@@ -119,50 +101,50 @@ class EntityViewedNotification extends Notification implements ShouldQueue
                     $this->entity_name => $this->entity->number,
                 ]
             ))
-            ->attachment(function ($attachment) use ($amount) {
+            ->attachment(function ($attachment) {
                 $attachment->title(ctrans('texts.entity_number_placeholder', ['entity' => ucfirst($this->entity_name), 'entity_number' => $this->entity->number]), $this->invitation->getAdminLink())
                            ->fields([
-                                ctrans('texts.client') => $this->contact->present()->name(),
-                                ctrans('texts.status_viewed') => $this->invitation->viewed_date,
-                            ]);
+                               ctrans('texts.client') => $this->contact->present()->name(),
+                               ctrans('texts.status_viewed') => $this->invitation->viewed_date,
+                           ]);
             });
     }
 
-    private function buildDataArray()
-    {
-        $amount = Number::formatMoney($this->entity->amount, $this->entity->client);
+    // private function buildDataArray()
+    // {
+    //     $amount = Number::formatMoney($this->entity->amount, $this->entity->client);
 
-        $data = [
-            'title' => $this->buildSubject(),
-            'message' => ctrans(
-                "texts.notification_{$this->entity_name}_viewed",
-                [
-                    'amount' => $amount,
-                    'client' => $this->contact->present()->name(),
-                    $this->entity_name => $this->entity->number,
-                ]
-            ),
-            'url' => $this->invitation->getAdminLink(),
-            'button' => ctrans("texts.view_{$this->entity_name}"),
-            'signature' => $this->settings->email_signature,
-            'logo' => $this->company->present()->logo(),
-            'settings' => $this->settings,
+    //     $data = [
+    //         'title' => $this->buildSubject(),
+    //         'message' => ctrans(
+    //             "texts.notification_{$this->entity_name}_viewed",
+    //             [
+    //                 'amount' => $amount,
+    //                 'client' => $this->contact->present()->name(),
+    //                 $this->entity_name => $this->entity->number,
+    //             ]
+    //         ),
+    //         'url' => $this->invitation->getAdminLink(),
+    //         'button' => ctrans("texts.view_{$this->entity_name}"),
+    //         'signature' => $this->settings->email_signature,
+    //         'logo' => $this->company->present()->logo(),
+    //         'settings' => $this->settings,
 
-        ];
+    //     ];
 
-        return $data;
-    }
+    //     return $data;
+    // }
 
-    private function buildSubject()
-    {
-        $subject = ctrans(
-            "texts.notification_{$this->entity_name}_viewed_subject",
-            [
-            'client' => $this->contact->present()->name(),
-            $this->entity_name => $this->entity->number,
-        ]
-        );
+    // private function buildSubject()
+    // {
+    //     $subject = ctrans(
+    //         "texts.notification_{$this->entity_name}_viewed_subject",
+    //         [
+    //             'client' => $this->contact->present()->name(),
+    //             $this->entity_name => $this->entity->number,
+    //         ]
+    //     );
 
-        return $subject;
-    }
+    //     return $subject;
+    // }
 }

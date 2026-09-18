@@ -4,10 +4,11 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Database\Factories;
 
 use App\Factory\InvoiceItemFactory;
@@ -16,13 +17,6 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 
 class InvoiceFactory extends Factory
 {
-    /**
-     * The name of the factory's corresponding model.
-     *
-     * @var string
-     */
-    protected $model = Invoice::class;
-
     /**
      * Define the model's default state.
      *
@@ -33,7 +27,7 @@ class InvoiceFactory extends Factory
         return [
             'status_id' => Invoice::STATUS_SENT,
             'number' => $this->faker->ean13(),
-            'discount' => $this->faker->numberBetween(1, 10),
+            'discount' => rand(1,10),
             'is_amount_discount' => (bool) random_int(0, 1),
             'tax_name1' => 'GST',
             'tax_rate1' => 10,
@@ -41,10 +35,10 @@ class InvoiceFactory extends Factory
             'tax_rate2' => 17.5,
             //'tax_name3' => 'THIRDTAX',
             //'tax_rate3' => 5,
-            'custom_value1' => $this->faker->date,
+            'custom_value1' => $this->faker->date(),
             'custom_value2' => rand(0, 1) ? 'yes' : 'no',
-            // 'custom_value3' => $this->faker->numberBetween(1,4),
-            // 'custom_value4' => $this->faker->numberBetween(1,4),
+            'custom_value3' => $this->faker->numberBetween(1, 4),
+            'custom_value4' => $this->faker->numberBetween(1, 4),
             'is_deleted' => false,
             'po_number' => $this->faker->text(10),
             'date' => $this->faker->date(),

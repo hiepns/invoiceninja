@@ -1,28 +1,28 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Messages\SlackMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class NewAccountCreated extends Notification implements ShouldQueue
+//@deprecated
+class NewAccountCreated extends Notification
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    //use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
      * Create a new notification instance.
@@ -50,38 +50,16 @@ class NewAccountCreated extends Notification implements ShouldQueue
      */
     public function via($notifiable)
     {
-        return ['slack', 'mail'];
+        return ['slack'];
     }
 
     /**
      * Get the mail representation of the notification.
      *
      * @param  mixed  $notifiable
-     * @return MailMessage
+     *
      */
-    public function toMail($notifiable)
-    {
-        $user_name = $this->user->first_name.' '.$this->user->last_name;
-        $email = $this->user->email;
-        $ip = $this->user->ip;
-
-        $data = [
-            'title' => ctrans('texts.new_signup'),
-            'message' => ctrans('texts.new_signup_text', ['user' => $user_name, 'email' => $email, 'ip' => $ip]),
-            'url' => config('ninja.web_url'),
-            'button' => ctrans('texts.account_login'),
-            'signature' => $this->company->settings->email_signature,
-            'logo' => $this->company->present()->logo(),
-            'settings' => $this->company->settings,
-        ];
-
-        return (new MailMessage)
-                    ->subject(ctrans('texts.new_signup'))
-                    ->withSwiftMessage(function ($message) {
-                        $message->getHeaders()->addTextHeader('Tag', $this->company->company_key);
-                    })
-                    ->markdown('email.admin.generic', $data);
-    }
+    public function toMail($notifiable) {}
 
     /**
      * Get the array representation of the notification.
@@ -100,11 +78,11 @@ class NewAccountCreated extends Notification implements ShouldQueue
     {
         $this->user->setCompany($this->company);
 
-        $user_name = $this->user->first_name.' '.$this->user->last_name;
+        $user_name = $this->user->first_name . ' ' . $this->user->last_name;
         $email = $this->user->email;
         $ip = $this->user->ip;
 
-        return (new SlackMessage)
+        return (new SlackMessage())
                 ->success()
                 ->from(ctrans('texts.notification_bot'))
                 ->image('https://app.invoiceninja.com/favicon.png')

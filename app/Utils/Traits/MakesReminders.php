@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Utils\Traits;
@@ -16,146 +17,112 @@ use Illuminate\Support\Carbon;
 
 /**
  * Class MakesReminders.
+ *
  */
 trait MakesReminders
 {
-    public function setReminder($settings = null)
-    {
-        if (! $settings) {
-            $settings = $this->client->getMergedSettings();
-        }
-
-        if (! $this->isPayable()) {
-            $this->next_send_date = null;
-            $this->save();
-
-            return; //exit early
-        }
-
-        $date_collection = collect();
-
-        if ($settings->schedule_reminder1 == 'after_invoice_date' &&
-            $settings->num_days_reminder1 > 0) {
-            $reminder_date = Carbon::parse($this->date)->addDays($settings->num_days_reminder1);
-
-            if ($reminder_date->gt(Carbon::parse($this->next_send_date)));
-            $date_collection->push($reminder_date->format('Y-m-d'));
-        }
-
-        if ($settings->schedule_reminder1 == 'before_due_date' &&
-            $settings->num_days_reminder1 > 0) {
-            $reminder_date = Carbon::parse($this->due_date)->subDays($settings->num_days_reminder1);
-
-            if ($reminder_date->gt(Carbon::parse($this->next_send_date)));
-            $date_collection->push($reminder_date->format('Y-m-d'));
-        }
-
-        if ($settings->schedule_reminder1 == 'after_due_date' &&
-            $settings->num_days_reminder1 > 0) {
-            $reminder_date = Carbon::parse($this->due_date)->addDays($settings->num_days_reminder1);
-
-            if ($reminder_date->gt(Carbon::parse($this->next_send_date)));
-            $date_collection->push($reminder_date->format('Y-m-d'));
-        }
-
-        if ($settings->schedule_reminder2 == 'after_invoice_date' &&
-            $settings->num_days_reminder2 > 0) {
-            $reminder_date = Carbon::parse($this->date)->addDays($settings->num_days_reminder2);
-
-            if ($reminder_date->gt(Carbon::parse($this->next_send_date)));
-            $date_collection->push($reminder_date->format('Y-m-d'));
-        }
-
-        if ($settings->schedule_reminder2 == 'before_due_date' &&
-            $settings->num_days_reminder2 > 0) {
-            $reminder_date = Carbon::parse($this->due_date)->subDays($settings->num_days_reminder2);
-
-            if ($reminder_date->gt(Carbon::parse($this->next_send_date)));
-            $date_collection->push($reminder_date->format('Y-m-d'));
-        }
-
-        if ($settings->schedule_reminder2 == 'after_due_date' &&
-            $settings->num_days_reminder2 > 0) {
-            $reminder_date = Carbon::parse($this->due_date)->addDays($settings->num_days_reminder2);
-
-            if ($reminder_date->gt(Carbon::parse($this->next_send_date)));
-            $date_collection->push($reminder_date->format('Y-m-d'));
-        }
-
-        if ($settings->schedule_reminder3 == 'after_invoice_date' &&
-            $settings->num_days_reminder3 > 0) {
-            $reminder_date = Carbon::parse($this->date)->addDays($settings->num_days_reminder3);
-
-            if ($reminder_date->gt(Carbon::parse($this->next_send_date)));
-            $date_collection->push($reminder_date->format('Y-m-d'));
-        }
-
-        if ($settings->schedule_reminder3 == 'before_due_date' &&
-            $settings->num_days_reminder3 > 0) {
-            $reminder_date = Carbon::parse($this->due_date)->subDays($settings->num_days_reminder3);
-
-            if ($reminder_date->gt(Carbon::parse($this->next_send_date)));
-            $date_collection->push($reminder_date->format('Y-m-d'));
-        }
-
-        if ($settings->schedule_reminder3 == 'after_due_date' &&
-            $settings->num_days_reminder3 > 0) {
-            $reminder_date = Carbon::parse($this->due_date)->addDays($settings->num_days_reminder3);
-
-            if ($reminder_date->gt(Carbon::parse($this->next_send_date)));
-            $date_collection->push($reminder_date->format('Y-m-d'));
-        }
-
-        $this->next_send_date = $date_collection->sort()->first();
-
-        $this->save();
-    }
-
+    /**
+     * @param string $schedule_reminder
+     * @param string $num_days_reminder
+     * @return ?bool
+     */
     public function inReminderWindow($schedule_reminder, $num_days_reminder)
     {
+        /** @var \App\Models\Invoice | \App\Models\Quote | \App\Models\RecurringInvoice  | \App\Models\Credit $this **/
+        $offset = $this->client->timezone_offset();
+        $entity_send_time = $this->client->getSetting('entity_send_time');
+
+        $today = $entity_send_time === 0
+            ? now()->startOfDay()->toDateString()
+            : now()->setTimezone($this->client->timezone()->name)->startOfDay()->toDateString();
+
         switch ($schedule_reminder) {
             case 'after_invoice_date':
-                return Carbon::parse($this->date)->addDays($num_days_reminder)->startOfDay()->eq(Carbon::now()->startOfDay());
-                break;
+                // return Carbon::parse($this->date)->addDays((int)$num_days_reminder)->startOfDay()->addSeconds($offset)->isSameDay(Carbon::now());
+
+                return Carbon::parse($this->date)
+                            ->addDays((int) $num_days_reminder)
+                            ->startOfDay()
+                            ->toDateString() <= $today;
+                // === ($entity_send_time === 0 ? now()->startOfDay()->toDateString() : now()->setTimezone($this->client->timezone()->name)->startOfDay()->toDateString());
+
             case 'before_due_date':
-                return Carbon::parse($this->due_date)->subDays($num_days_reminder)->startOfDay()->eq(Carbon::now()->startOfDay());
-                break;
+                $partial_or_due_date = ($this->partial > 0 && isset($this->partial_due_date)) ? $this->partial_due_date : $this->due_date;
+                // return Carbon::parse($partial_or_due_date)->subDays((int)$num_days_reminder)->startOfDay()->addSeconds($offset)->isSameDay(Carbon::now());
+
+                return Carbon::parse($partial_or_due_date)
+                            ->subDays((int) $num_days_reminder)
+                            ->startOfDay()
+                            ->toDateString() <= $today;
+                // === ($entity_send_time === 0 ? now()->startOfDay()->toDateString() : now()->setTimezone($this->client->timezone()->name)->startOfDay()->toDateString());
+
+
             case 'after_due_date':
-                return Carbon::parse($this->due_date)->addDays($num_days_reminder)->startOfDay()->eq(Carbon::now()->startOfDay());
-                break;
+                $partial_or_due_date = ($this->partial > 0 && isset($this->partial_due_date)) ? $this->partial_due_date : $this->due_date;
+                // return Carbon::parse($partial_or_due_date)->addDays((int)$num_days_reminder)->startOfDay()->addSeconds($offset)->isSameDay(Carbon::now());
+
+                return Carbon::parse($partial_or_due_date)
+                            ->addDays((int) $num_days_reminder)
+                            ->startOfDay()
+                            ->toDateString() <= $today;
+                // === ($entity_send_time === 0 ? now()->startOfDay()->toDateString() : now()->setTimezone($this->client->timezone()->name)->startOfDay()->toDateString());
+
+            case 'after_quote_date':
+
+                return Carbon::parse($this->date)
+                            ->addDays((int) $num_days_reminder)
+                            ->startOfDay()
+                            ->toDateString() <= $today;
+                // === ($entity_send_time === 0 ? now()->startOfDay()->toDateString() : now()->setTimezone($this->client->timezone()->name)->startOfDay()->toDateString());
+
+            case 'after_valid_until_date':
+
+                return Carbon::parse($this->due_date)
+                            ->addDays((int) $num_days_reminder)
+                            ->startOfDay()
+                            ->toDateString() <= $today;
+                // === ($entity_send_time === 0 ? now()->startOfDay()->toDateString() : now()->setTimezone($this->client->timezone()->name)->startOfDay()->toDateString());
+
+            case 'before_valid_until_date':
+
+                return Carbon::parse($this->due_date)
+                            ->subDays((int) $num_days_reminder)
+                            ->startOfDay()
+                            ->toDateString() <= $today;
+                // === ($entity_send_time === 0 ? now()->startOfDay()->toDateString() : now()->setTimezone($this->client->timezone()->name)->startOfDay()->toDateString());
+
             default:
                 return null;
-                break;
         }
     }
 
     public function calculateTemplate(string $entity_string): string
     {
-        //if invoice is currently a draft, or being marked as sent, this will be the initial email
+
+        /** @var \App\Models\Invoice | \App\Models\Quote | \App\Models\RecurringInvoice  | \App\Models\Credit $this **/
         $client = $this->client;
 
         if ($entity_string != 'invoice') {
             return $entity_string;
         }
 
-        //if the invoice
         if ($this->inReminderWindow(
             $client->getSetting('schedule_reminder1'),
             $client->getSetting('num_days_reminder1')
-        )) {
+        ) && ! $this->reminder1_sent) {
             return 'reminder1';
         } elseif ($this->inReminderWindow(
             $client->getSetting('schedule_reminder2'),
             $client->getSetting('num_days_reminder2')
-        )) {
+        ) && ! $this->reminder2_sent) {
             return 'reminder2';
         } elseif ($this->inReminderWindow(
             $client->getSetting('schedule_reminder3'),
             $client->getSetting('num_days_reminder3')
-        )) {
+        ) && ! $this->reminder3_sent) {
             return 'reminder3';
         } elseif ($this->checkEndlessReminder(
-            $this->last_sent_date,
+            $this->reminder_last_sent,
             $client->getSetting('endless_reminder_frequency_id')
         )) {
             return 'endless_reminder';
@@ -163,26 +130,32 @@ trait MakesReminders
             return $entity_string;
         }
 
-        //also implement endless reminders here
     }
 
-    private function checkEndlessReminder($last_sent_date, $endless_reminder_frequency_id) :bool
+    private function checkEndlessReminder($last_sent_date, $endless_reminder_frequency_id): bool
     {
-        if (Carbon::now()->startOfDay()->eq($this->addTimeInterval($last_sent_date, $endless_reminder_frequency_id))) {
+        $interval = $this->addTimeInterval($last_sent_date, $endless_reminder_frequency_id);
+
+        if (is_null($interval)) {
+            return false;
+        }
+
+        if (Carbon::now()->startOfDay()->eq($interval)) {
             return true;
         }
 
         return false;
     }
 
-    private function addTimeInterval($date, $endless_reminder_frequency_id) :?Carbon
+    private function addTimeInterval($date, $endless_reminder_frequency_id): ?Carbon
     {
-        if (!$date) {
+        if (! $date) {
             return null;
         }
-        
 
         switch ($endless_reminder_frequency_id) {
+            case RecurringInvoice::FREQUENCY_DAILY:
+                return Carbon::parse($date)->addDay()->startOfDay();
             case RecurringInvoice::FREQUENCY_WEEKLY:
                 return Carbon::parse($date)->addWeek()->startOfDay();
             case RecurringInvoice::FREQUENCY_TWO_WEEKS:

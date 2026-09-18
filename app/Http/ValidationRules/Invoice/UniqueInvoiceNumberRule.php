@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules\Invoice;
@@ -41,19 +42,19 @@ class UniqueInvoiceNumberRule implements Rule
      */
     public function message()
     {
-        return 'Invoice number already taken';
+        return ctrans('texts.invoice_number_taken');
     }
 
     /**
      * @return bool
      */
-    private function checkIfInvoiceNumberUnique() : bool
+    private function checkIfInvoiceNumberUnique(): bool
     {
         if (empty($this->input['number'])) {
             return true;
         }
 
-        $invoice = Invoice::where('client_id', $this->input['client_id'])
+        $invoice = Invoice::query()->where('client_id', $this->input['client_id'])
                         ->where('number', $this->input['number'])
                         ->withTrashed()
                         ->exists();

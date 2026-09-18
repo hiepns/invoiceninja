@@ -1,10 +1,20 @@
 <?php
 
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
+
 namespace App\Exceptions;
 
 use Exception;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 
 class PaymentRefundFailed extends Exception
 {
@@ -22,12 +32,19 @@ class PaymentRefundFailed extends Exception
      * Render the exception into an HTTP response.
      *
      * @param  Request  $request
-     * @return Response
+     * @return JsonResponse
      */
     public function render($request)
     {
+        // $msg = 'Unable to refund the transaction';
+        $msg = ctrans('texts.warning_local_refund');
+
+        if ($this->getMessage() && strlen($this->getMessage()) > 1) {
+            $msg = $this->getMessage();
+        }
+
         return response()->json([
-           'message' => 'Unable to refund the transaction',
-       ], 401);
+            'message' => $msg,
+        ], 401);
     }
 }

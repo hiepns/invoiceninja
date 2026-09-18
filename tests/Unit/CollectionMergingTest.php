@@ -1,31 +1,29 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Unit;
 
-use App\Utils\Traits\UserSessionAttributes;
-use Illuminate\Support\Facades\Session;
+use App\Factory\ClientContactFactory;
+use App\Factory\InvoiceItemFactory;
 use Tests\TestCase;
 
 /**
- * @test
+ *
  */
 class CollectionMergingTest extends TestCase
 {
-    use UserSessionAttributes;
-
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
-
-        Session::start();
     }
 
     public function testUniqueValues()
@@ -61,5 +59,54 @@ class CollectionMergingTest extends TestCase
         $collection = collect($array);
         $intersect = $collection->intersectByKeys($collection->flatten(1)->unique());
         $this->assertEquals(11, $intersect->count());
+    }
+
+    public function testExistenceInCollection()
+    {
+        $items = InvoiceItemFactory::generate(5);
+
+        $this->assertFalse(collect($items)->contains('type_id', '3'));
+        $this->assertFalse(collect($items)->contains('type_id', 3));
+
+        $item = InvoiceItemFactory::create();
+        $item->type_id = '3';
+        $items[] = $item;
+
+        $this->assertTrue(collect($items)->contains('type_id', '3'));
+        $this->assertTrue(collect($items)->contains('type_id', 3));
+    }
+
+    public function testClientContactSendEmailExists()
+    {
+        $new_collection = collect();
+
+        $cc = ClientContactFactory::create(1, 1);
+        $cc->send_email = true;
+
+        $new_collection->push($cc);
+
+        $cc_false = ClientContactFactory::create(1, 1);
+        $cc_false->send_email = false;
+
+        $new_collection->push($cc_false);
+
+        $this->assertTrue($new_collection->contains('send_email', true));
+    }
+
+    public function testClientContactSendEmailDoesNotExists()
+    {
+        $new_collection = collect();
+
+        $cc = ClientContactFactory::create(1, 1);
+        $cc->send_email = false;
+
+        $new_collection->push($cc);
+
+        $cc_false = ClientContactFactory::create(1, 1);
+        $cc_false->send_email = false;
+
+        $new_collection->push($cc_false);
+
+        $this->assertFalse($new_collection->contains('send_email', true));
     }
 }

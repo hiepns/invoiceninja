@@ -4,10 +4,11 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Database\Seeders;
 
 use App\Models\Language;
@@ -24,7 +25,7 @@ class LanguageSeeder extends Seeder
         // https://www.loc.gov/standards/iso639-2/php/code_list.php
 
         $languages = [
-            ['id' => 1, 'name' => 'English', 'locale' => 'en'],
+            ['id' => 1, 'name' => 'English - United States', 'locale' => 'en'],
             ['id' => 2, 'name' => 'Italian', 'locale' => 'it'],
             ['id' => 3, 'name' => 'German', 'locale' => 'de'],
             ['id' => 4, 'name' => 'French', 'locale' => 'fr'],
@@ -52,6 +53,24 @@ class LanguageSeeder extends Seeder
             ['id' => 26, 'name' => 'Thai', 'locale' => 'th'],
             ['id' => 27, 'name' => 'Macedonian', 'locale' => 'mk_MK'],
             ['id' => 28, 'name' => 'Chinese - Taiwan', 'locale' => 'zh_TW'],
+            ['id' => 29, 'name' => 'Russian (Russia)', 'locale' => 'ru_RU'],
+            ['id' => 30, 'name' => 'Arabic', 'locale' => 'ar'],
+            ['id' => 31, 'name' => 'Persian', 'locale' => 'fa'],
+            ['id' => 32, 'name' => 'Latvian', 'locale' => 'lv_LV'],
+            ['id' => 33, 'name' => 'Serbian', 'locale' => 'sr'],
+            ['id' => 34, 'name' => 'Slovak', 'locale' => 'sk'],
+            ['id' => 35, 'name' => 'Estonian', 'locale' => 'et'],
+            ['id' => 36, 'name' => 'Bulgarian', 'locale' => 'bg'],
+            ['id' => 37, 'name' => 'Hebrew', 'locale' => 'he'],
+            ['id' => 38, 'name' => 'Khmer', 'locale' => 'km_KH'],
+            ['id' => 39, 'name' => 'Hungarian', 'locale' => 'hu'],
+            ['id' => 40, 'name' => 'French - Swiss', 'locale' => 'fr_CH'],
+            ['id' => 41, 'name' => 'Lao', 'locale' => 'lo_LA'],
+            ['id' => 42, 'name' => 'Vietnamese', 'locale' => 'vi'],
+            ['id' => 43, 'name' => 'Catalan', 'locale' => 'ca'],
+            ['id' => 44, 'name' => 'Afrikaans', 'locale' => 'af_ZA'],
+            ['id' => 45, 'name' => 'Indonesian', 'locale' => 'id_ID'],
+
         ];
 
         foreach ($languages as $language) {
@@ -63,5 +82,6 @@ class LanguageSeeder extends Seeder
                 Language::create($language);
             }
         }
+
     }
 }

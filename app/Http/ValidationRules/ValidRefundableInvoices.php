@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules;
@@ -40,49 +41,42 @@ class ValidRefundableInvoices implements Rule
     public function passes($attribute, $value)
     {
         if (! array_key_exists('id', $this->input)) {
-            $this->error_msg = 'Payment `id` required.';
+            $this->error_msg = ctrans('texts.payment_id_required');
 
             return false;
         }
 
-        $payment = Payment::whereId($this->input['id'])->first();
+        /**@var \App\Models\Payment $payment **/
+        $payment = Payment::where('id', $this->input['id'])->company()->first();
 
         if (! $payment) {
-            $this->error_msg = "Payment couldn't be retrieved cannot be refunded ";
+            $this->error_msg = ctrans('texts.unable_to_retrieve_payment');
 
             return false;
         }
-
-        /*We are not sending the Refunded amount in the 'amount field, this is the Payment->amount, need to skip this check. */
-        // if (request()->has('amount') && (request()->input('amount') > ($payment->amount - $payment->refunded))) {
-        //     $this->error_msg = "Attempting to refund more than payment amount, enter a value equal to or lower than the payment amount of ". $payment->amount;
-        //     return false;
-        // }
 
         /*If no invoices has been sent, then we apply the payment to the client account*/
         $invoices = [];
 
         if (is_array($value)) {
-            $invoices = Invoice::whereIn('id', array_column($this->input['invoices'], 'invoice_id'))->company()->get();
+            $invoices = Invoice::query()->whereIn('id', array_column($this->input['invoices'], 'invoice_id'))->company()->get();
         } else {
             return true;
         }
 
         foreach ($invoices as $invoice) {
             if (! $invoice->isRefundable()) {
-                $this->error_msg = 'Invoice id '.$invoice->hashed_id.' cannot be refunded';
+                $this->error_msg = ctrans('texts.invoice_cannot_be_refunded', ['invoice' => $invoice->hashed_id]);
 
                 return false;
             }
 
             foreach ($this->input['invoices'] as $val) {
                 if ($val['invoice_id'] == $invoice->id) {
-
-                    //$pivot_record = $invoice->payments->where('id', $invoice->id)->first();
                     $pivot_record = $payment->paymentables->where('paymentable_id', $invoice->id)->first();
 
-                    if ($val['amount'] > ($pivot_record->amount - $pivot_record->refunded)) {
-                        $this->error_msg = 'Attempting to refund '.$val['amount'].' only '.($pivot_record->amount - $pivot_record->refunded).' available for refund';
+                    if ($pivot_record && $val['amount'] > ($pivot_record->amount - $pivot_record->refunded)) {
+                        $this->error_msg = ctrans('texts.attempted_refund_failed', ['amount' => $val['amount'], 'refundable_amount' => ($pivot_record->amount - $pivot_record->refunded)]);
 
                         return false;
                     }

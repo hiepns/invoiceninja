@@ -1,17 +1,27 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Helpers\Invoice;
 
+use App\Models\Quote;
+use App\Utils\Number;
+use App\Models\Client;
+use App\Models\Credit;
+use App\Models\Vendor;
 use App\Models\Invoice;
+use App\Models\PurchaseOrder;
+use App\Models\RecurringQuote;
+use App\Models\RecurringInvoice;
+use App\DataMapper\Tax\RuleInterface;
 use App\Utils\Traits\NumberFormatter;
 
 class InvoiceItemSumInclusive
@@ -19,47 +29,131 @@ class InvoiceItemSumInclusive
     use NumberFormatter;
     use Discounter;
     use Taxer;
+    use HarvestsSurchargeTaxCategories;
 
-    protected $invoice;
+    public bool $peppol_enabled = false;
 
-    private $items;
+    //@phpstan-ignore-next-line
+    private array $eu_tax_jurisdictions = [
+        'AT', // Austria
+        'BE', // Belgium
+        'BG', // Bulgaria
+        'CY', // Cyprus
+        'CZ', // Czech Republic
+        'DE', // Germany
+        'DK', // Denmark
+        'EE', // Estonia
+        'ES', // Spain
+        'FI', // Finland
+        'FR', // France
+        'GR', // Greece
+        'HR', // Croatia
+        'HU', // Hungary
+        'IE', // Ireland
+        'IT', // Italy
+        'LT', // Lithuania
+        'LU', // Luxembourg
+        'LV', // Latvia
+        'MT', // Malta
+        'NL', // Netherlands
+        'PL', // Poland
+        'PT', // Portugal
+        'RO', // Romania
+        'SE', // Sweden
+        'SI', // Slovenia
+        'SK', // Slovakia
+    ];
 
-    private $line_total;
+    private array $tax_jurisdictions = [
+        'AD', // Andorra
+        'AT', // Austria
+        'BE', // Belgium
+        'BG', // Bulgaria
+        'CY', // Cyprus
+        'CZ', // Czech Republic
+        'DE', // Germany
+        'DK', // Denmark
+        'EE', // Estonia
+        'ES', // Spain
+        'FI', // Finland
+        'FR', // France
+        'GR', // Greece
+        'HR', // Croatia
+        'HU', // Hungary
+        'IE', // Ireland
+        'IT', // Italy
+        'LT', // Lithuania
+        'LU', // Luxembourg
+        'LV', // Latvia
+        'MT', // Malta
+        'NL', // Netherlands
+        'PL', // Poland
+        'PT', // Portugal
+        'RO', // Romania
+        'SE', // Sweden
+        'SI', // Slovenia
+        'SK', // Slovakia
 
-    private $currency;
+        'US', // USA
+
+        'AU', // Australia
+
+        'SG', // Singapore
+    ];
+
+    protected RecurringInvoice|Invoice|Quote|Credit|PurchaseOrder|RecurringQuote $invoice;
+
+    private \App\Models\Currency $currency;
 
     private $total_taxes;
 
+    /** @phpstan-ignore-next-line */
     private $item;
 
     private $line_items;
 
     private $sub_total;
 
-    private $total_discount;
-
     private $tax_collection;
 
-    public function __construct($invoice)
+    private $custom_surcharge_map;
+
+    private bool $calc_tax = false;
+
+    private $total_discount;
+
+    private Client|Vendor $client;
+
+    private RuleInterface $rule;
+
+    public function __construct(RecurringInvoice|Invoice|Quote|Credit|PurchaseOrder|RecurringQuote $invoice)
     {
         $this->tax_collection = collect([]);
+        $this->custom_surcharge_map = collect([]);
+
+        $this->total_discount = 0;
 
         $this->invoice = $invoice;
+        $this->client = $invoice->client ?? $invoice->vendor;
 
-        $this->currency = $this->invoice->client->currency();
+        if ($this->invoice->client) {
+            $this->currency = $this->invoice->client->currency();
+            $this->shouldCalculateTax();
+            $this->peppol_enabled = $this->client->getSetting('e_invoice_type') == 'PEPPOL';
+        } else {
+            $this->currency = $this->invoice->vendor->currency();
+        }
 
         $this->line_items = [];
     }
 
     public function process()
     {
-        if (! $this->invoice->line_items || ! is_array($this->invoice->line_items) || count($this->invoice->line_items) == 0) {
-            $this->items = [];
-
+        if (!$this->invoice->line_items || ! is_iterable($this->invoice->line_items) || count($this->invoice->line_items) == 0) {
             return $this;
         }
 
-        $this->calcLineItems();
+        $this->calcLineItems()->applyTaxedSurchargeTaxes();
 
         return $this;
     }
@@ -87,23 +181,73 @@ class InvoiceItemSumInclusive
 
     private function sumLineItem()
     {
-        $this->setLineTotal($this->formatValue($this->item->cost, $this->currency->precision) * $this->formatValue($this->item->quantity, $this->currency->precision));
+        $this->setLineTotal($this->item->cost * $this->item->quantity);
 
         return $this;
     }
 
     private function setDiscount()
     {
-        if ($this->invoice->is_amount_discount) {
-            $this->setLineTotal($this->getLineTotal() - $this->formatValue($this->item->discount, $this->currency->precision));
+        if ($this->lineItemUsesAmountDiscount()) {
+            $discount = $this->formatValue($this->item->discount, $this->currency->precision);
+            $this->setLineTotal($this->getLineTotal() - $discount);
+            $this->total_discount += $this->item->discount;
         } else {
             $this->setLineTotal($this->getLineTotal() - $this->formatValue(($this->item->line_total * ($this->item->discount / 100)), $this->currency->precision));
+            $this->total_discount += ($this->item->line_total * ($this->item->discount / 100));
         }
 
-        $this->item->is_amount_discount = $this->invoice->is_amount_discount;
+        if (!$this->invoice->is_amount_discount) {
+            $this->item->is_amount_discount = false;
+        }
 
         return $this;
     }
+
+    private function lineItemUsesAmountDiscount(): bool
+    {
+        if (!$this->invoice->is_amount_discount) {
+            return false;
+        }
+
+        return (bool) $this->item->is_amount_discount;
+    }
+
+
+    /**
+     * Attempts to calculate taxes based on the clients location
+     *
+     * @return self
+     */
+    private function calcTaxesAutomatically(): self
+    {
+        $this->rule->tax($this->item);
+
+        $precision = strlen(substr(strrchr($this->rule->tax_rate1, "."), 1));
+
+        $this->item->tax_name1 = $this->rule->tax_name1;
+        $this->item->tax_rate1 = round($this->rule->tax_rate1, $precision);
+
+        $precision = strlen(substr(strrchr($this->rule->tax_rate2, "."), 1));
+
+        $this->item->tax_name2 = $this->rule->tax_name2;
+        $this->item->tax_rate2 = round($this->rule->tax_rate2, $precision);
+
+        $precision = strlen(substr(strrchr($this->rule->tax_rate3, "."), 1));
+
+        $this->item->tax_name3 = $this->rule->tax_name3;
+        $this->item->tax_rate3 = round($this->rule->tax_rate3, $precision);
+
+        $this->invoice->tax_name1 = '';
+        $this->invoice->tax_rate1 = 0;
+        $this->invoice->tax_name2 = '';
+        $this->invoice->tax_rate2 = 0;
+        $this->invoice->tax_name3 = '';
+        $this->invoice->tax_rate3 = 0;
+
+        return $this;
+    }
+
 
     /**
      * Taxes effect the line totals and item costs. we decrement both on
@@ -111,48 +255,137 @@ class InvoiceItemSumInclusive
      */
     private function calcTaxes()
     {
-        $item_tax = 0;
+
+        if ($this->calc_tax) {
+            $this->calcTaxesAutomatically();
+        }
+
+        if ($this->client->is_tax_exempt) {
+            $this->item->tax_rate1 = 0;
+            $this->item->tax_rate2 = 0;
+            $this->item->tax_rate3 = 0;
+            $this->item->tax_name1 = '';
+            $this->item->tax_name2 = '';
+            $this->item->tax_name3 = '';
+        }
 
         $amount = $this->item->line_total - ($this->item->line_total * ($this->invoice->discount / 100));
 
-        $item_tax_rate1_total = $this->calcInclusiveLineTax($this->item->tax_rate1, $amount);
+        $rates = [$this->item->tax_rate1, $this->item->tax_rate2, $this->item->tax_rate3];
 
-        $item_tax += $this->formatValue($item_tax_rate1_total, $this->currency->precision);
+        // Tax-anchored additive inclusive back-out (see InclusiveTax): each tax is
+        // round(base x rate); net is the shared taxable base and absorbs the residual.
+        $inclusive = InclusiveTax::backout($amount, $rates, $this->currency->precision);
+        $net = $inclusive['net'];
+        $item_tax = $inclusive['tax'];
+        [$item_tax_rate1_total, $item_tax_rate2_total, $item_tax_rate3_total] = $inclusive['components'];
 
-        if ($item_tax_rate1_total > 0) {
-            $this->groupTax($this->item->tax_name1, $this->item->tax_rate1, $item_tax_rate1_total);
+        if (strlen($this->item->tax_name1) > 1) {
+            $this->groupTax($this->item->tax_name1, $this->item->tax_rate1, $item_tax_rate1_total, $amount, $this->item->tax_id ?? '1', $net);
         }
 
-        $item_tax_rate2_total = $this->calcInclusiveLineTax($this->item->tax_rate2, $amount);
-
-        $item_tax += $this->formatValue($item_tax_rate2_total, $this->currency->precision);
-
-        if ($item_tax_rate2_total > 0) {
-            $this->groupTax($this->item->tax_name2, $this->item->tax_rate2, $item_tax_rate2_total);
+        if (strlen($this->item->tax_name2) > 1) {
+            $this->groupTax($this->item->tax_name2, $this->item->tax_rate2, $item_tax_rate2_total, $amount, $this->item->tax_id ?? '1', $net);
         }
 
-        $item_tax_rate3_total = $this->calcInclusiveLineTax($this->item->tax_rate3, $amount);
-
-        $item_tax += $this->formatValue($item_tax_rate3_total, $this->currency->precision);
-
-        if ($item_tax_rate3_total > 0) {
-            $this->groupTax($this->item->tax_name3, $this->item->tax_rate3, $item_tax_rate3_total);
+        if (strlen($this->item->tax_name3) > 1) {
+            $this->groupTax($this->item->tax_name3, $this->item->tax_rate3, $item_tax_rate3_total, $amount, $this->item->tax_id ?? '1', $net);
         }
 
-        $this->setTotalTaxes($this->formatValue($item_tax, $this->currency->precision));
+        $this->item->tax_amount = $item_tax;
+
+        try {
+            $this->item->net_cost = round($net / $this->item->quantity, $this->currency->precision);
+        } catch (\DivisionByZeroError $e) {
+            $this->item->net_cost = $this->item->cost;
+        }
+
+        $this->setTotalTaxes($item_tax);
 
         return $this;
     }
 
-    private function groupTax($tax_name, $tax_rate, $tax_total)
+    /**
+     * NOTE: This is the single documented exception to routing inclusive tax
+     * through App\Helpers\Invoice\InclusiveTax when invoice-level taxes are present.
+     * When only line-item taxes exist, surcharges are taxed here using the same
+     * harvest order: document header first, then line items.
+     */
+    private function applyTaxedSurchargeTaxes(): self
+    {
+        if (! $this->hasSurchargesRequiringTaxAllocation() || $this->hasInvoiceLevelTaxCategories()) {
+            return $this;
+        }
+
+        $this->custom_surcharge_map = collect([]);
+
+        $this->harvestSurchargeTaxCategories()->each(function ($tax) {
+
+            $tax_component = 0;
+            $amount = 0;
+
+            foreach ([1, 2, 3, 4] as $i) {
+                if (! $this->shouldTaxSurcharge($i)) {
+                    continue;
+                }
+
+                $surcharge = $this->invoice->{"custom_surcharge{$i}"};
+                $tax_component += round($surcharge - ($surcharge / (1 + ($tax['percentage'] / 100))), 2);
+                $this->setCustomSurchargeNetMap([
+                    "custom_surcharge{$i}" => round($surcharge / (1 + ($tax['percentage'] / 100)), 2),
+                ]);
+                $amount += $surcharge;
+            }
+
+            if ($tax_component > 0) {
+                $this->groupTax($tax['name'], $tax['percentage'], $tax_component, $amount, $tax['tax_id']);
+            }
+
+        });
+
+        return $this;
+    }
+
+    private function setCustomSurchargeNetMap(array $surcharge): self
+    {
+        $this->custom_surcharge_map->push($surcharge);
+
+        return $this;
+    }
+
+    public function getCustomSurchargeNetMap()
+    {
+        return $this->custom_surcharge_map;
+    }
+
+
+
+
+
+
+    private function groupTax($tax_name, $tax_rate, $tax_total, $amount, $tax_id = '', $base_amount = null)
     {
         $group_tax = [];
 
-        $key = str_replace(' ', '', $tax_name.$tax_rate);
+        $key = str_replace(' ', '', $tax_name . $tax_rate);
 
-        $group_tax = ['key' => $key, 'total' => $tax_total, 'tax_name' => $tax_name.' '.$tax_rate.'%'];
+        //Handles an edge case where a blank line is entered.
+        if ($tax_rate > 0 && $amount == 0) {
+            return;
+        }
+
+        // With additive inclusive tax the taxable base is the shared net (same
+        // for every rate on the line); fall back to the single-rate back-out.
+        $base_amount = $base_amount ?? ($tax_rate > 0 ? round($amount / (1 + ($tax_rate / 100)), 2) : $amount);
+
+        $group_tax = ['key' => $key, 'total' => $tax_total, 'tax_name' => $tax_name . ' ' . Number::formatValueNoTrailingZeroes(floatval($tax_rate), $this->client) . '%', 'tax_id' => $tax_id, 'tax_rate' => $tax_rate, 'base_amount' => $base_amount];
 
         $this->tax_collection->push(collect($group_tax));
+    }
+
+    public function getTotalDiscount()
+    {
+        return $this->total_discount;
     }
 
     public function getTotalTaxes()
@@ -169,12 +402,19 @@ class InvoiceItemSumInclusive
 
     public function setLineTotal($total)
     {
-        $this->item->line_total = $total;
+        $this->item->gross_line_total = round(($total + 0.000000000000004), 2);
+
+        $this->item->line_total = round(($total + 0.000000000000004), 2);
 
         return $this;
     }
 
     public function getLineTotal()
+    {
+        return $this->item->line_total;
+    }
+
+    public function getGrossLineTotal()
     {
         return $this->item->line_total;
     }
@@ -201,6 +441,11 @@ class InvoiceItemSumInclusive
         return $this->sub_total;
     }
 
+    public function getGrossSubTotal()
+    {
+        return $this->sub_total;
+    }
+
     public function setSubTotal($value)
     {
         $this->sub_total = $value;
@@ -222,35 +467,81 @@ class InvoiceItemSumInclusive
     {
         $this->setGroupedTaxes(collect([]));
 
-        $item_tax = 0;
-
         foreach ($this->line_items as $this->item) {
-            $amount = $this->item->line_total - ($this->item->line_total * ($this->invoice->discount / $this->sub_total));
-            $item_tax_rate1_total = $this->calcInclusiveLineTax($this->item->tax_rate1, $amount);
-
-            $item_tax += $item_tax_rate1_total;
-
-            if ($item_tax_rate1_total > 0) {
-                $this->groupTax($this->item->tax_name1, $this->item->tax_rate1, $item_tax_rate1_total);
+            if ($this->sub_total == 0) {
+                $amount = $this->item->line_total;
+            } else {
+                $amount = $this->item->line_total - ($this->invoice->discount * ($this->item->line_total / $this->sub_total));
             }
 
-            $item_tax_rate2_total = $this->calcInclusiveLineTax($this->item->tax_rate2, $amount);
+            $rates = [$this->item->tax_rate1, $this->item->tax_rate2, $this->item->tax_rate3];
 
-            $item_tax += $item_tax_rate2_total;
+            $inclusive = InclusiveTax::backout($amount, $rates, $this->currency->precision);
+            $net = $inclusive['net'];
+            $item_tax = $inclusive['tax'];
+            [$item_tax_rate1_total, $item_tax_rate2_total, $item_tax_rate3_total] = $inclusive['components'];
 
-            if ($item_tax_rate2_total > 0) {
-                $this->groupTax($this->item->tax_name2, $this->item->tax_rate2, $item_tax_rate2_total);
+            if ($item_tax_rate1_total != 0) {
+                $this->groupTax($this->item->tax_name1, $this->item->tax_rate1, $item_tax_rate1_total, $amount, $this->item->tax_id ?? '1', $net);
             }
 
-            $item_tax_rate3_total = $this->calcInclusiveLineTax($this->item->tax_rate3, $amount);
-
-            $item_tax += $item_tax_rate3_total;
-
-            if ($item_tax_rate3_total > 0) {
-                $this->groupTax($this->item->tax_name3, $this->item->tax_rate3, $item_tax_rate3_total);
+            if ($item_tax_rate2_total != 0) {
+                $this->groupTax($this->item->tax_name2, $this->item->tax_rate2, $item_tax_rate2_total, $amount, $this->item->tax_id ?? '1', $net);
             }
+
+            if ($item_tax_rate3_total != 0) {
+                $this->groupTax($this->item->tax_name3, $this->item->tax_rate3, $item_tax_rate3_total, $amount, $this->item->tax_id ?? '1', $net);
+            }
+
+            $this->setTotalTaxes($this->getTotalTaxes() + $item_tax);
+            $this->item->gross_line_total = $this->getLineTotal();
+
+            $this->item->tax_amount = $item_tax;
+
+            try {
+                $this->item->net_cost = round($net / $this->item->quantity, $this->currency->precision);
+            } catch (\DivisionByZeroError $e) {
+                $this->item->net_cost = $this->item->cost;
+            }
+
         }
 
-        $this->setTotalTaxes($item_tax);
+        $this->applyTaxedSurchargeTaxes();
+
+        return $this;
+
     }
+
+
+    private function shouldCalculateTax(): self
+    {
+
+        if (!$this->invoice->company?->calculate_taxes || $this->invoice->company->account->isFreeHostedClient() || ($this->invoice instanceof Invoice && $this->invoice->isTaxImmutable())) {//@phpstan-ignore-line
+            $this->calc_tax = false;
+            return $this;
+        }
+
+        if (in_array($this->client->company->country()->iso_3166_2, $this->tax_jurisdictions)) { //only calculate for supported tax jurisdictions
+
+            $class = "App\DataMapper\Tax\\" . $this->client->company->country()->iso_3166_2 . "\\Rule";
+
+            $this->rule = new $class();
+
+            if ($this->rule->regionWithNoTaxCoverage($this->client->country->iso_3166_2 ?? false)) {
+                return $this;
+            }
+
+            $this->rule
+                 ->setEntity($this->invoice)
+                 ->init();
+
+            $this->calc_tax = $this->rule->shouldCalcTax();
+
+            return $this;
+        }
+
+        return $this;
+    }
+
+
 }

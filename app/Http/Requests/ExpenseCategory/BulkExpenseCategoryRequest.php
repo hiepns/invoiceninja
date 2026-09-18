@@ -1,41 +1,56 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
-
 
 namespace App\Http\Requests\ExpenseCategory;
 
 use App\Http\Requests\Request;
-use App\Utils\Traits\BulkOptions;
+use Illuminate\Validation\Rule;
 
 class BulkExpenseCategoryRequest extends Request
 {
-    use BulkOptions;
-
-    /**
-     * Determine if the user is authorized to make this request.
-     *
-     * @return bool
-     */
-    public function authorize()
+    public function authorize(): bool
     {
-        return auth()->user()->isAdmin();
+        return true;
     }
 
     /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function rules()
+    public function rules(): array
     {
-        return [];
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return [
+            'action' => ['required', 'bail', 'in:archive,restore,delete'],
+            'ids' => [
+                'required',
+                'bail',
+                'array',
+                'min:1',
+                Rule::exists('expense_categories', 'id')->where('company_id', $user->company()->id),
+            ],
+            'ids.*' => ['bail', 'integer'],
+        ];
+    }
+
+    public function prepareForValidation(): void
+    {
+        $input = $this->all();
+
+        if (isset($input['ids']) && is_array($input['ids'])) {
+            $input['ids'] = $this->transformKeys($input['ids']);
+        }
+
+        $this->replace($input);
     }
 }

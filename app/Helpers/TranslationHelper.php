@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 /**
@@ -15,12 +16,12 @@
  *
  * //Cache::forever($custom_company_translated_string, 'mogly');
  *
- * @param string translation string key
+ * @param string $string
  * @param array $replace
  * @param null $locale
  * @return string
  */
-function ctrans(string $string, $replace = [], $locale = null) : string
+function ctrans(string $string, $replace = [], $locale = null): string
 {
-    return trans($string, $replace, $locale);
+    return html_entity_decode(trans($string, $replace, $locale));
 }

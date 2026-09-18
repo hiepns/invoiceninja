@@ -1,37 +1,58 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Transformers;
 
+use App\Models\Activity;
 use App\Models\Backup;
+use App\Models\Client;
 use App\Models\Credit;
 use App\Models\CreditInvitation;
 use App\Models\Document;
 use App\Utils\Traits\MakesHash;
+use League\Fractal\Resource\Item;
 
 class CreditTransformer extends EntityTransformer
 {
     use MakesHash;
 
-    protected $defaultIncludes = [
+    protected array $defaultIncludes = [
         'invitations',
         'documents',
     ];
 
-    protected $availableIncludes = [
-        'invitations',
-        'history',
-    //    'client',
-        'documents',
+    protected array $availableIncludes = [
+        'activities',
+        'client',
+        'location',
     ];
+
+    public function includeLocation(Credit $credit)
+    {
+        $transformer = new LocationTransformer($this->serializer);
+
+        if (!$credit->location) {
+            return null;
+        }
+
+        return $this->includeItem($credit->location, $transformer, \App\Models\Location::class);
+    }
+
+    public function includeActivities(Credit $credit)
+    {
+        $transformer = new ActivityTransformer($this->serializer);
+
+        return $this->includeCollection($credit->activities, $transformer, Activity::class);
+    }
 
     public function includeHistory(Credit $credit)
     {
@@ -47,28 +68,13 @@ class CreditTransformer extends EntityTransformer
         return $this->includeCollection($credit->invitations, $transformer, CreditInvitation::class);
     }
 
-    /*
-        public function includePayments(quote $credit)
-        {
-            $transformer = new PaymentTransformer($this->account, $this->serializer, $credit);
+    public function includeClient(Credit $credit): Item
+    {
+        $transformer = new ClientTransformer($this->serializer);
 
-            return $this->includeCollection($credit->payments, $transformer, ENTITY_PAYMENT);
-        }
+        return $this->includeItem($credit->client, $transformer, Client::class);
+    }
 
-        public function includeClient(quote $credit)
-        {
-            $transformer = new ClientTransformer($this->account, $this->serializer);
-
-            return $this->includeItem($credit->client, $transformer, ENTITY_CLIENT);
-        }
-
-        public function includeExpenses(quote $credit)
-        {
-            $transformer = new ExpenseTransformer($this->account, $this->serializer);
-
-            return $this->includeCollection($credit->expenses, $transformer, ENTITY_EXPENSE);
-        }
-*/
     public function includeDocuments(Credit $credit)
     {
         $transformer = new DocumentTransformer($this->serializer);
@@ -83,10 +89,10 @@ class CreditTransformer extends EntityTransformer
             'user_id' => $this->encodePrimaryKey($credit->user_id),
             'project_id' => $this->encodePrimaryKey($credit->project_id),
             'assigned_user_id' => $this->encodePrimaryKey($credit->assigned_user_id),
+            'vendor_id' => (string) $this->encodePrimaryKey($credit->vendor_id),
             'amount' => (float) $credit->amount,
             'balance' => (float) $credit->balance,
             'client_id' => (string) $this->encodePrimaryKey($credit->client_id),
-            'vendor_id' => (string) $this->encodePrimaryKey($credit->vendor_id),
             'status_id' => (string) ($credit->status_id ?: 1),
             'design_id' => (string) $this->encodePrimaryKey($credit->design_id),
             'created_at' => (int) $credit->created_at,
@@ -98,7 +104,7 @@ class CreditTransformer extends EntityTransformer
             'po_number' => $credit->po_number ?: '',
             'date' => $credit->date ?: '',
             'last_sent_date' => $credit->last_sent_date ?: '',
-            'next_send_date' => $credit->date ?: '',
+            'next_send_date' => $credit->next_send_date ?: '',
             'reminder1_sent' => $credit->reminder1_sent ?: '',
             'reminder2_sent' => $credit->reminder2_sent ?: '',
             'reminder3_sent' => $credit->reminder3_sent ?: '',
@@ -136,6 +142,15 @@ class CreditTransformer extends EntityTransformer
             'line_items' => $credit->line_items ?: (array) [],
             'entity_type' => 'credit',
             'exchange_rate' => (float) $credit->exchange_rate,
+            'paid_to_date' => (float) $credit->paid_to_date,
+            'subscription_id' => $this->encodePrimaryKey($credit->subscription_id),
+            'invoice_id' => $credit->invoice_id ? $this->encodePrimaryKey($credit->invoice_id) : '',
+            'tax_info' => $credit->tax_data ?: new \stdClass(),
+            'e_invoice' => $credit->e_invoice ?: new \stdClass(),
+            'location_id' => $this->encodePrimaryKey($credit->location_id),
+            'backup' => $credit->backup,
+            'tags' => $this->transformTags($credit),
+            'sync' => $credit->sync,
         ];
     }
 }

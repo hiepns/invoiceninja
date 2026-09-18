@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Utils\Traits\Recurring;
@@ -15,7 +16,6 @@ use Illuminate\Support\Carbon;
 
 trait HasRecurrence
 {
-
     /**
      * Calculates the first day of the month, this will ALWAYS
      * be the first of NEXT month
@@ -49,24 +49,23 @@ trait HasRecurrence
      * Sets the day of the month, if in the past we ADD a month
      *
      * @param Carbon $date              The start date
-     * @param String|Int $day_of_month  The day of the month
+     * @param string|int $day_of_month  The day of the month
      */
     public function setDayOfMonth($date, $day_of_month)
     {
         $carbon_date = Carbon::parse($date);
-        
+
         $set_date = $carbon_date->copy()->setUnitNoOverflow('day', $day_of_month, 'month');
 
         //If the set date is less than the original date we need to add a month.
         //If we are overflowing dates, then we need to diff the dates and ensure it doesn't equal 0
-        if ($set_date->lte($date) || $set_date->diffInDays($carbon_date) == 0) {
+        if ($set_date->lte($date) || intval(abs($set_date->diffInDays($carbon_date))) == 0) {
             $set_date->addMonthNoOverflow();
         }
 
         if ($day_of_month == '31') {
             $set_date->endOfMonth();
         }
-
 
         return $set_date;
     }

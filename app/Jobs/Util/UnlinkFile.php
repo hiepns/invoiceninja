@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Jobs\Util;
@@ -20,17 +21,12 @@ use Illuminate\Support\Facades\Storage;
 
 class UnlinkFile implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
-    protected $file_path;
-
-    protected $disk;
-
-    public function __construct(string $disk, string $file_path)
-    {
-        $this->file_path = $file_path;
-        $this->disk = $disk;
-    }
+    public function __construct(protected string $disk = '', protected ?string $file_path = '') {}
 
     /**
      * Execute the job.
@@ -39,6 +35,20 @@ class UnlinkFile implements ShouldQueue
      */
     public function handle()
     {
-        Storage::disk($this->disk)->delete($this->file_path);
+        /* Do not delete files if we are on the sync queue*/
+        if (config('queue.default') == 'sync') {
+            return;
+        }
+
+
+        if (!$this->file_path) {
+            return;
+        }
+
+        try {
+            Storage::disk($this->disk)->delete($this->file_path);
+        } catch (\Exception $e) {
+
+        }
     }
 }

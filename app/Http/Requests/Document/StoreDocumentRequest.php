@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\Document;
@@ -21,21 +22,30 @@ class StoreDocumentRequest extends Request
      *
      * @return bool
      */
-    public function authorize() : bool
+    public function authorize(): bool
     {
-        return auth()->user()->can('create', Document::class);
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return $user->can('create', Document::class) || ($user->hasIntersectPermissions(['edit_all', 'create_all']));
     }
 
     public function rules()
     {
         return [
+            'is_public' => 'sometimes|boolean',
         ];
     }
 
-    protected function prepareForValidation()
+    public function prepareForValidation()
     {
         $input = $this->all();
 
+        if (isset($input['is_public'])) {
+            $input['is_public'] = $this->toBoolean($input['is_public']);
+        }
+
         $this->replace($input);
     }
+
 }

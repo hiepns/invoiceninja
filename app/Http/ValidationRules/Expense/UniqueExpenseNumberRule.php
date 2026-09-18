@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules\Expense;
@@ -41,13 +42,13 @@ class UniqueExpenseNumberRule implements Rule
      */
     public function message()
     {
-        return 'Expense number already taken';
+        return ctrans('texts.expense_number_taken');
     }
 
     /**
      * @return bool
      */
-    private function checkIfExpenseNumberUnique() : bool
+    private function checkIfExpenseNumberUnique(): bool
     {
         if (empty($this->input['number'])) {
             return true;
@@ -57,20 +58,6 @@ class UniqueExpenseNumberRule implements Rule
                           ->where('number', $this->input['number'])
                           ->withTrashed();
 
-        // if(isset($this->input['client_id']))
-        //     $expense->where('client_id', $this->input['client_id']);
-
         return $expense->exists();
-
-        // $expense = Expense::where('client_id', $this->input['client_id'])
-        //                 ->where('number', $this->input['number'])
-        //                 ->withTrashed()
-        //                 ->exists();
-
-        // if ($expense) {
-        //     return false;
-        // }
-
-        // return true;
     }
 }

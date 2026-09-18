@@ -1,30 +1,30 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Notifications;
 
 use Closure;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Messages\SlackMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Mail;
 
-class ClientContactRequestCancellation extends Notification implements ShouldQueue
+//@deprecated for mail
+class ClientContactRequestCancellation extends Notification
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    //  use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
      * Create a new notification instance.
@@ -56,31 +56,16 @@ class ClientContactRequestCancellation extends Notification implements ShouldQue
      */
     public function via($notifiable)
     {
-        return ['mail', 'slack'];
+        return ['slack'];
     }
 
     /**
      * Get the mail representation of the notification.
      *
      * @param  mixed  $notifiable
-     * @return MailMessage
+     *
      */
-    public function toMail($notifiable)
-    {
-        if (static::$toMailCallback) {
-            return call_user_func(static::$toMailCallback, $notifiable, $this->client_contact);
-        }
-
-        $client_contact_name = $this->client_contact->present()->name();
-        $client_name = $this->client_contact->client->present()->name();
-        $recurring_invoice_number = $this->recurring_invoice->number;
-
-        return (new MailMessage)
-            ->subject('Request for recurring invoice cancellation from '.$client_contact_name)
-            ->markdown('email.support.cancellation', [
-                'message' => "Contact [{$client_contact_name}] from Client [{$client_name}] requested to cancel Recurring Invoice [#{$recurring_invoice_number}]",
-            ]);
-    }
+    public function toMail($notifiable) {}
 
     /**
      * Get the array representation of the notification.
@@ -101,7 +86,7 @@ class ClientContactRequestCancellation extends Notification implements ShouldQue
         $client_name = $this->client_contact->client->present()->name();
         $recurring_invoice_number = $this->recurring_invoice->number;
 
-        return (new SlackMessage)
+        return (new SlackMessage())
                 ->success()
                 ->to('#devv2')
                 ->from('System')

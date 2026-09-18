@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Repositories;
@@ -41,29 +42,35 @@ class VendorRepository extends BaseRepository
      * @return     vendor|\App\Models\Vendor|null  Vendor Object
      * @throws \Laracasts\Presenter\Exceptions\PresenterException
      */
-    public function save(array $data, Vendor $vendor) : ?Vendor
+    public function save(array $data, Vendor $vendor): ?Vendor
     {
-        $vendor->fill($data);
+        $tag_ids = $this->resolveTagIdsForSync($data, $vendor);
 
-        $vendor->save();
+        $saveable_vendor = $data;
 
-        if ($vendor->id_number == '' || ! $vendor->id_number) {
-            $vendor->id_number = $this->getNextVendorNumber($vendor);
-        } //todo write tests for this and make sure that custom vendor numbers also works as expected from here
+        if (array_key_exists('contacts', $data)) {
+            unset($saveable_vendor['contacts']);
+        }
 
-        $vendor->save();
+        $vendor->fill($saveable_vendor);
 
-        if (isset($data['contacts'])) {
+        if (!$vendor->country_id) {
+            $vendor->country_id = auth()->user()->company()->country()->id ?? 840;
+        }
+
+        $vendor->saveQuietly();
+
+        $vendor->service()->applyNumber();
+
+        if (isset($data['contacts']) || $vendor->contacts()->count() == 0) {
             $this->contact_repo->save($data, $vendor);
         }
 
-        if (empty($data['name'])) {
-            $data['name'] = $vendor->present()->name();
-        }
-
-        if (array_key_exists('documents', $data)) {
+        if (array_key_exists('documents', $data) && count($data['documents']) >= 1) {
             $this->saveDocuments($data['documents'], $vendor);
         }
+
+        $this->syncResolvedTags($vendor, $tag_ids);
 
         return $vendor;
     }

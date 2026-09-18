@@ -1,63 +1,93 @@
 <?php
 
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
+
 namespace App\Http\Controllers\Auth;
 
-use App\Factory\ClientContactFactory;
-use App\Factory\ClientFactory;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ClientPortal\RegisterRequest;
-use App\Models\Client;
+use App\Livewire\BillingPortal\Authentication\ClientRegisterService;
 use App\Models\Company;
+use App\Services\ClientPortal\CustomFieldService;
+use App\Utils\Ninja;
+use App\Utils\Traits\GeneratesCounter;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 
 class ContactRegisterController extends Controller
 {
+    use GeneratesCounter;
+
     public function __construct()
     {
-        $this->middleware(['guest', 'contact.register']);
+        $this->middleware(['guest']);
     }
 
-    public function showRegisterForm(string $company_key)
+    public function showRegisterForm(string $company_key = '')
     {
-        $company = Company::where('company_key', $company_key)->firstOrFail();
+        if (strlen($company_key) > 2) {
+            $key = $company_key;
+        } else {
+            $key = request()->session()->has('company_key') ? request()->session()->get('company_key') : $company_key;
+        }
 
-        return render('auth.register', compact(['company']));
+        /** @var \App\Models\Company $company **/
+        $company = Company::where('company_key', $key)->firstOrFail();
+
+        App::forgetInstance('translator');
+        $t = app('translator');
+        $t->replace(Ninja::transformTranslations($company->settings));
+
+        $domain_name = request()->getHost();
+
+        $show_turnstile = false;
+
+        if (config('ninja.cloudflare.turnstile.site_key') && strpos($domain_name, config('ninja.app_domain')) !== false) {
+            $show_turnstile = true;
+        }
+
+        $service = app(CustomFieldService::class);
+
+        $data = [
+            'formed_disabled' => $company->account->isFreeHostedClient(),
+            'register_company' => $company,
+            'account' => $company->account,
+            'submitsForm' => false,
+            'show_turnstile' => $show_turnstile,
+            'custom_field_definitions' => collect($service->buildFields($company))->keyBy('key')->all(),
+        ];
+
+        return render('auth.register', $data);
     }
 
     public function register(RegisterRequest $request)
     {
+
+        $company = $request->company();
+
+        if (! $company->client_can_register || $company->account->isFreeHostedClient()) {
+            abort(403, 'This page is restricted');
+        }
+
         $request->merge(['company' => $request->company()]);
 
-        $client = $this->getClient($request->all());
-        $client_contact = $this->getClientContact($request->all(), $client);
+        $service = new ClientRegisterService(
+            company: $request->company(),
+        );
 
-        Auth::guard('contact')->login($client_contact, true);
+        $client = $service->createClient($request->all());
+        $client_contact = $service->createClientContact($request->all(), $client);
 
-        return redirect()->route('client.dashboard');
-    }
+        Auth::guard('contact')->loginUsingId($client_contact->id, true);
 
-    private function getClient(array $data)
-    {
-        $client = ClientFactory::create($data['company']->id, $data['company']->owner()->id);
-
-        $client->fill($data);
-        $client->save();
-
-        return $client;
-    }
-
-    public function getClientContact(array $data, Client $client)
-    {
-        $client_contact = ClientContactFactory::create($data['company']->id, $data['company']->owner()->id);
-        $client_contact->fill($data);
-
-        $client_contact->client_id = $client->id;
-        $client_contact->is_primary = true;
-        $client_contact->password = Hash::make($data['password']);
-
-        $client_contact->save();
-
-        return $client_contact;
+        return redirect()->intended(route('client.dashboard'));
     }
 }

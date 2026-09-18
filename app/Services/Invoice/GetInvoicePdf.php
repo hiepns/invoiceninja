@@ -1,51 +1,53 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Services\Invoice;
 
-use App\Jobs\Entity\CreateEntityPdf;
+use App\Jobs\Entity\CreateRawPdf;
 use App\Models\ClientContact;
 use App\Models\Invoice;
 use App\Services\AbstractService;
-use Illuminate\Support\Facades\Storage;
 
 class GetInvoicePdf extends AbstractService
 {
-    public function __construct(Invoice $invoice, ClientContact $contact = null)
-    {
-        $this->invoice = $invoice;
-
-        $this->contact = $contact;
-    }
+    public function __construct(public Invoice $invoice, public ?ClientContact $contact = null) {}
 
     public function run()
     {
         if (! $this->contact) {
-            $this->contact = $this->invoice->client->primary_contact()->first();
+            $this->contact = $this->invoice->client->primary_contact()->first() ?: $this->invoice->client->contacts()->first();
         }
 
-        $invitation = $this->invoice->invitations->where('client_contact_id', $this->contact->id)->first();
+        // Skip the client_contact_id match when the client has no contacts at all
+        // (a degenerate state that still occurs in tests and imports). The fallback
+        // below — first invitation, or auto-created — handles those cases.
+        $invitation = $this->contact
+            ? $this->invoice->invitations->where('client_contact_id', $this->contact->id)->first()
+            : null;
 
-        $path = $this->invoice->client->invoice_filepath();
-
-        $file_path = $path.$this->invoice->number.'.pdf';
-
-        $disk = config('filesystems.default');
-
-        $file = Storage::disk($disk)->exists($file_path);
-
-        if (! $file) {
-            $file_path = CreateEntityPdf::dispatchNow($invitation);
+        if (! $invitation) {
+            $invitation = $this->invoice->invitations->first();
         }
 
-        return Storage::disk($disk)->path($file_path);
+        // Failsafe: an invoice persisted outside the repository (e.g. via factory
+        // in tests, or hydrated from an import) may have no invitations yet. Mirror
+        // BaseRepository::save()'s recovery path so PDF generation never receives null.
+        if (! $invitation) {
+            $this->invoice->service()->createInvitations()->save();
+            $this->invoice->load('invitations');
+            $invitation = $this->invoice->invitations->first();
+        }
+
+        return (new CreateRawPdf($invitation))->handle();
+
     }
 }

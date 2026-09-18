@@ -1,73 +1,119 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\Vendor;
 
 use App\Http\Requests\Request;
+use App\Models\Vendor;
 use App\Utils\Traits\ChecksEntityStatus;
 use App\Utils\Traits\MakesHash;
+use Illuminate\Validation\Rule;
 
 class UpdateVendorRequest extends Request
 {
     use MakesHash;
     use ChecksEntityStatus;
 
+    /** @var class-string */
+    protected ?string $tag_entity_type = Vendor::class;
+
     /**
      * Determine if the user is authorized to make this request.
      *
      * @return bool
      */
-    public function authorize() : bool
+    public function authorize(): bool
     {
-        return auth()->user()->can('edit', $this->vendor);
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return $user->can('edit', $this->vendor);
     }
 
     public function rules()
     {
-        /* Ensure we have a client name, and that all emails are unique*/
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        $rules['country_id'] = 'integer|nullable';
-        //$rules['id_number'] = 'unique:clients,id_number,,id,company_id,' . auth()->user()->company()->id;
-        $rules['id_number'] = 'unique:clients,id_number,'.$this->id.',id,company_id,'.$this->company_id;
-        $rules['contacts.*.email'] = 'nullable|distinct';
+        $rules['country_id'] = 'integer';
 
-        $contacts = request('contacts');
-
-        if (is_array($contacts)) {
-            // for ($i = 0; $i < count($contacts); $i++) {
-                // //    $rules['contacts.' . $i . '.email'] = 'nullable|email|unique:client_contacts,email,' . isset($contacts[$i]['id'].',company_id,'.$this->company_id);
-                //     //$rules['contacts.' . $i . '.email'] = 'nullable|email';
-                // }
+        if ($this->number) {
+            $rules['number'] = Rule::unique('vendors')->where('company_id', $user->company()->id)->ignore($this->vendor->id);
         }
 
-        return $rules;
+        $rules['contacts'] = 'bail|array';
+        $rules['contacts.*.email'] = 'bail|nullable|distinct|sometimes|email';
+        $rules['contacts.*.id'] = ['bail','nullable','sometimes', Rule::exists('vendor_contacts', 'id')->where('vendor_id', $this->vendor->id)->where('company_id', $user->company()->id)];
+
+        $rules['contacts.*.password'] = [
+            'bail',
+            'nullable',
+            'sometimes',
+            'string',
+            'min:7',             // must be at least 10 characters in length
+            'regex:/[a-z]/',      // must contain at least one lowercase letter
+            'regex:/[A-Z]/',      // must contain at least one uppercase letter
+            'regex:/[0-9]/',      // must contain at least one digit
+            //'regex:/[@$!%*#?&.]/', // must contain a special character
+        ];
+
+        $rules['currency_id'] = 'bail|sometimes|exists:currencies,id';
+        $rules['file'] = 'bail|sometimes|array';
+        $rules['file.*'] = $this->fileValidation();
+        $rules['documents'] = 'bail|sometimes|array';
+        $rules['documents.*'] = $this->fileValidation();
+
+        $rules['language_id'] = 'bail|nullable|sometimes|exists:languages,id';
+        $rules['classification'] = 'bail|sometimes|nullable|in:individual,business,company,partnership,trust,charity,government,other';
+
+        return $this->globalRules($rules);
     }
 
     public function messages()
     {
         return [
-            'unique' => ctrans('validation.unique', ['attribute' => 'email']),
             'email' => ctrans('validation.email', ['attribute' => 'email']),
             'name.required' => ctrans('validation.required', ['attribute' => 'name']),
             'required' => ctrans('validation.required', ['attribute' => 'email']),
         ];
     }
 
-    protected function prepareForValidation()
+    public function prepareForValidation()
     {
         $input = $this->all();
 
-        if (array_key_exists('assigned_user_id', $input) && is_string($input['assigned_user_id'])) {
-            $input['assigned_user_id'] = $this->decodePrimaryKey($input['assigned_user_id']);
+        if ($this->file('file') instanceof \Illuminate\Http\UploadedFile) {
+            $this->files->set('file', [$this->file('file')]);
         }
+
+        if (isset($input['name'])) {
+            $input['name'] = strip_tags($input['name']);
+        }
+
+        if (isset($input['documents'])) {
+            unset($input['documents']);
+        }
+
+        if (array_key_exists('country_id', $input) && is_null($input['country_id'])) {
+            unset($input['country_id']);
+        } elseif (!$this->vendor->country_id) {
+
+            /** @var \App\Models\User $user */
+            $user = auth()->user();
+
+            $input['country_id'] = $user->company()->country()->id;
+        }
+
+        $input = $this->decodePrimaryKeys($input);
 
         $this->replace($input);
     }

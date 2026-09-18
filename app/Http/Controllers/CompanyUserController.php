@@ -1,21 +1,24 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
 
-use App\Exceptions\ModelNotFoundException;
+use App\Http\Requests\CompanyUser\UpdateCompanyUserPreferencesRequest;
 use App\Http\Requests\CompanyUser\UpdateCompanyUserRequest;
 use App\Models\CompanyUser;
 use App\Models\User;
 use App\Transformers\CompanyUserTransformer;
+use App\Transformers\UserTransformer;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Response;
 
 class CompanyUserController extends BaseController
@@ -34,22 +37,16 @@ class CompanyUserController extends BaseController
      *
      * @return void
      */
-    public function index()
-    {
-    }
+    public function index() {}
 
     /**
      * Show the form for creating a new resource.
      *
      * @return void
      */
-    public function create()
-    {
-    }
+    public function create() {}
 
-    public function store()
-    {
-    }
+    public function store() {}
 
     /**
      * Display the specified resource.
@@ -83,7 +80,6 @@ class CompanyUserController extends BaseController
      *      tags={"company_user"},
      *      summary="Update a company user record",
      *      description="Attempts to update a company user record. A company user can modify only their settings fields. Full access for Admin users",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Response(
      *          response=200,
@@ -106,31 +102,61 @@ class CompanyUserController extends BaseController
      *     )
      * @param UpdateCompanyUserRequest $request
      * @param User $user
-     * @return Response|mixed|void
+     * @return Response| \Illuminate\Http\JsonResponse|mixed|void
      */
     public function update(UpdateCompanyUserRequest $request, User $user)
     {
-        $company = auth()->user()->company();
+        /** @var \App\Models\User $auth_user */
+        $auth_user = auth()->user();
+        $company = $auth_user->company();
 
-        $company_user = CompanyUser::whereUserId($user->id)->whereCompanyId($company->id)->first();
+        $company_user = CompanyUser::query()->where('user_id', $user->id)->where('company_id', $company->id)->first();
 
         if (! $company_user) {
-            throw new ModelNotFoundException('Company User record not found');
-
-            return;
+            throw new ModelNotFoundException(ctrans('texts.company_user_not_found'));
         }
 
-        if (auth()->user()->isAdmin()) {
+        if ($auth_user->isAdmin()) {
             $company_user->fill($request->input('company_user'));
         } else {
-            $company_user->fill($request->input('company_user')['settings']);
-            $company_user->fill($request->input('company_user')['notifications']);
+            $company_user->settings = $request->input('company_user')['settings'];
+            $company_user->notifications = $request->input('company_user')['notifications'];
+
+            if (isset($request->input('company_user')['react_settings'])) {
+                $company_user->react_settings = $request->input('company_user')['react_settings'];
+            }
+
         }
 
         $company_user->save();
 
         return $this->itemResponse($company_user->fresh());
     }
+
+    public function updatePreferences(UpdateCompanyUserPreferencesRequest $request, User $user)
+    {
+        /** @var \App\Models\User $auth_user */
+        $auth_user = auth()->user();
+        $company = $auth_user->company();
+
+        $company = $auth_user->company();
+
+        $company_user = CompanyUser::whereUserId($user->id)->whereCompanyId($company->id)->first();
+
+        if (! $company_user) {
+            throw new ModelNotFoundException(ctrans('texts.company_user_not_found'));
+        }
+
+        $this->entity_type = User::class;
+
+        $this->entity_transformer = UserTransformer::class;
+
+        $company_user->react_settings = $request->react_settings;
+        $company_user->save();
+
+        return $this->itemResponse($user->fresh());
+    }
+
 
     /**
      * Remove the specified resource from storage.

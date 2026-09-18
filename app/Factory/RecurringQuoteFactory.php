@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Factory;
@@ -15,13 +16,14 @@ use App\Models\RecurringQuote;
 
 class RecurringQuoteFactory
 {
-    public static function create(int $company_id, int $user_id) :RecurringQuote
+    public static function create(int $company_id, int $user_id): RecurringQuote
     {
         $quote = new RecurringQuote();
         $quote->status_id = RecurringQuote::STATUS_DRAFT;
         $quote->discount = 0;
         $quote->is_amount_discount = true;
         $quote->po_number = '';
+        $quote->number = '';
         $quote->footer = '';
         $quote->terms = '';
         $quote->public_notes = '';
@@ -35,10 +37,10 @@ class RecurringQuoteFactory
         $quote->tax_rate1 = 0;
         $quote->tax_name2 = '';
         $quote->tax_rate2 = 0;
-        $quote->custom_value1 = 0;
-        $quote->custom_value2 = 0;
-        $quote->custom_value3 = 0;
-        $quote->custom_value4 = 0;
+        $quote->custom_value1 = '';
+        $quote->custom_value2 = '';
+        $quote->custom_value3 = '';
+        $quote->custom_value4 = '';
         $quote->amount = 0;
         $quote->balance = 0;
         $quote->partial = 0;
@@ -48,6 +50,7 @@ class RecurringQuoteFactory
         $quote->last_sent_date = null;
         $quote->next_send_date = null;
         $quote->remaining_cycles = 0;
+        $quote->paid_to_date = 0;
 
         return $quote;
     }

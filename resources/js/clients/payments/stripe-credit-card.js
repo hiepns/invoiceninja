@@ -3,28 +3,47 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
+import { wait, instant } from '../wait';
+
 class StripeCreditCard {
-    constructor(key, token, secret, onlyAuthorization) {
+    constructor(key, secret, onlyAuthorization, stripeConnect) {
         this.key = key;
-        this.token = token;
         this.secret = secret;
         this.onlyAuthorization = onlyAuthorization;
+        this.stripeConnect = stripeConnect;
     }
 
     setupStripe() {
-        this.stripe = Stripe(this.key);
+        if (this.stripeConnect) {
+            this.stripe = Stripe(this.key, {
+                stripeAccount: this.stripeConnect,
+            });
+        } else {
+            this.stripe = Stripe(this.key);
+        }
+
         this.elements = this.stripe.elements();
 
         return this;
     }
 
     createElement() {
-        this.cardElement = this.elements.create('card');
+        this.cardElement = this.elements.create('card', {
+            hidePostalCode:
+                document.querySelector('meta[name=stripe-require-postal-code]')
+                    ?.content === '0',
+            value: {
+                postalCode: document.querySelector(
+                    'meta[name=client-postal-code]'
+                ).content,
+            },
+            hideIcon: false,
+        });
 
         return this;
     }
@@ -36,9 +55,11 @@ class StripeCreditCard {
     }
 
     completePaymentUsingToken() {
-        let payNowButton = document.getElementById('pay-now-with-token');
+        let token = document.querySelector('input[name=token]').value;
 
+        let payNowButton = document.getElementById('pay-now');
         this.payNowButton = payNowButton;
+
         this.payNowButton.disabled = true;
 
         this.payNowButton.querySelector('svg').classList.remove('hidden');
@@ -46,7 +67,7 @@ class StripeCreditCard {
 
         this.stripe
             .handleCardPayment(this.secret, {
-                payment_method: this.token,
+                payment_method: token,
             })
             .then((result) => {
                 if (result.error) {
@@ -71,7 +92,7 @@ class StripeCreditCard {
         this.stripe
             .handleCardPayment(this.secret, this.cardElement, {
                 payment_method_data: {
-                    billing_details: { name: cardHolderName.value },
+                    billing_details: { name: cardHolderName.value ?? ''},
                 },
             })
             .then((result) => {
@@ -84,17 +105,16 @@ class StripeCreditCard {
     }
 
     handleSuccess(result) {
-        document.querySelector(
-            'input[name="gateway_response"]'
-        ).value = JSON.stringify(result.paymentIntent);
+        document.querySelector('input[name="gateway_response"]').value =
+            JSON.stringify(result.paymentIntent);
 
         let tokenBillingCheckbox = document.querySelector(
-            'input[name="token-billing-checkbox"]'
+            'input[name="token-billing-checkbox"]:checked'
         );
 
         if (tokenBillingCheckbox) {
             document.querySelector('input[name="store_card"]').value =
-                tokenBillingCheckbox.checked;
+                tokenBillingCheckbox.value;
         }
 
         document.getElementById('server-response').submit();
@@ -131,7 +151,7 @@ class StripeCreditCard {
             })
             .then((result) => {
                 if (result.error) {
-                    return this.handleFailure(result);
+                    return this.handleFailure(result.error.message);
                 }
 
                 return this.handleSuccessfulAuthorization(result);
@@ -158,36 +178,83 @@ class StripeCreditCard {
                     return this.handleAuthorization();
                 });
         } else {
-            if (this.token) {
-                document
-                    .getElementById('pay-now-with-token')
-                    .addEventListener('click', () => {
+            Array.from(
+                document.getElementsByClassName('toggle-payment-with-token')
+            ).forEach((element) =>
+                element.addEventListener('click', (element) => {
+                    document
+                        .getElementById('stripe--payment-container')
+                        .classList.add('hidden');
+                    document.getElementById(
+                        'save-card--container'
+                    ).style.display = 'none';
+                    document.querySelector('input[name=token]').value =
+                        element.target.dataset.token;
+                })
+            );
+
+            document
+                .getElementById('toggle-payment-with-credit-card')
+                .addEventListener('click', (element) => {
+                    document
+                        .getElementById('stripe--payment-container')
+                        .classList.remove('hidden');
+                    document.getElementById(
+                        'save-card--container'
+                    ).style.display = 'grid';
+                    document.querySelector('input[name=token]').value = '';
+                });
+
+            this.createElement().mountCardElement();
+
+            document.getElementById('pay-now').addEventListener('click', () => {
+                try {
+                    let tokenInput =
+                        document.querySelector('input[name=token]');
+
+                    if (tokenInput.value) {
                         return this.completePaymentUsingToken();
-                    });
-            }
+                    }
 
-            if (!this.token) {
-                this.createElement().mountCardElement();
-
-                document
-                    .getElementById('pay-now')
-                    .addEventListener('click', () => {
-                        return this.completePaymentWithoutToken();
-                    });
-            }
+                    return this.completePaymentWithoutToken();
+                } catch (error) {
+                    console.log(error.message);
+                }
+            });
         }
     }
 }
 
-const publishableKey =
-    document.querySelector('meta[name="stripe-publishable-key"]').content ?? '';
+function boot() {
+    const publishableKey =
+        document.querySelector('meta[name="stripe-publishable-key"]')
+            ?.content ?? '';
 
-const token = document.querySelector('meta[name="stripe-token"]').content ?? '';
+    const secret =
+        document.querySelector('meta[name="stripe-secret"]')?.content ?? '';
 
-const secret =
-    document.querySelector('meta[name="stripe-secret"]').content ?? '';
+    const onlyAuthorization =
+        document.querySelector('meta[name="only-authorization"]')?.content ??
+        '';
 
-const onlyAuthorization =
-    document.querySelector('meta[name="only-authorization"]').content ?? '';
+    const stripeConnect =
+        document.querySelector('meta[name="stripe-account-id"]')?.content ?? '';
 
-new StripeCreditCard(publishableKey, token, secret, onlyAuthorization).handle();
+    let s = new StripeCreditCard(
+        publishableKey,
+        secret,
+        onlyAuthorization,
+        stripeConnect
+    );
+
+    s.handle();
+
+    /** @type {NodeListOf<HTMLInputElement>} */
+    const tokens = document.querySelectorAll('input.toggle-payment-with-token');
+
+    if (tokens.length > 0) {
+        tokens[0].click();
+    }
+}
+
+instant() ? boot() : wait('#stripe-credit-card-payment').then(() => boot());

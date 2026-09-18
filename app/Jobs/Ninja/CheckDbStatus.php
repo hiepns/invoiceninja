@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Jobs\Ninja;
@@ -20,7 +21,10 @@ use Turbo124\Beacon\Jobs\Database\MySQL\DbStatus;
 
 class CheckDbStatus implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     /**
      * Create a new job instance.
@@ -39,7 +43,7 @@ class CheckDbStatus implements ShouldQueue
      */
     public function handle()
     {
-        DbStatus::dispatchNow('db-ninja-01', 'db.status.db-ninja-01');
-        DbStatus::dispatchNow('db-ninja-02', 'db.status.db-ninja-02');
+        (new DbStatus('db-ninja-01', 'db.status.db-ninja-01'))->handle();
+        (new DbStatus('db-ninja-02', 'db.status.db-ninja-02'))->handle();
     }
 }

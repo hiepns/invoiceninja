@@ -1,71 +1,64 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Feature;
 
-use App\Jobs\Util\UpdateExchangeRates;
-use App\Libraries\Currency\Conversion\CurrencyApi;
-use App\Models\Currency;
-use App\Utils\Traits\MakesHash;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Session;
-use Tests\MockAccountData;
 use Tests\TestCase;
+use App\Models\Currency;
+use Tests\MockAccountData;
+use App\Utils\Traits\MakesHash;
+use App\Jobs\Util\UpdateExchangeRates;
+use Illuminate\Support\Facades\Artisan;
+use App\Libraries\Currency\Conversion\CurrencyApi;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 
 /**
- * @test
- * @covers App\Jobs\Util\UpdateExchangeRates
+ *
+ *  App\Jobs\Util\UpdateExchangeRates
  */
 class UpdateExchangeRatesTest extends TestCase
 {
     use MakesHash;
-    use DatabaseTransactions;
-    use MockAccountData;
 
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
-        $this->makeTestData();
+        if (empty(config('ninja.currency_converter_api_key'))) {
+            $this->markTestSkipped("no currency key set");
+        }
 
-        Session::start();
+        if (Currency::count() == 0) {
+            Artisan::call('db:seed', ['--force' => true]);
+        }
 
-        $this->faker = \Faker\Factory::create();
-
-        Model::reguard();
     }
 
     public function testExchangeRate()
     {
-        if (! empty(config('ninja.currency_converter_api_key'))) {
-            $cc_endpoint = sprintf('https://openexchangerates.org/api/latest.json?app_id=%s', config('ninja.currency_converter_api_key'));
+        $cc_endpoint = sprintf('https://openexchangerates.org/api/latest.json?app_id=%s', config('ninja.currency_converter_api_key'));
 
-            $client = new \GuzzleHttp\Client();
-            $response = $client->get($cc_endpoint);
+        $client = new \GuzzleHttp\Client();
+        $response = $client->get($cc_endpoint);
 
-            $currency_api = json_decode($response->getBody());
+        $currency_api = json_decode($response->getBody());
 
-            UpdateExchangeRates::dispatchNow();
+        (new UpdateExchangeRates())->handle();
 
-            $currencies = Cache::get('currencies');
+        $gbp_currency = \App\Models\Currency::find(2);
 
-            $gbp_currency = $currencies->filter(function ($item) {
-                return $item->id == 2;
-            })->first();
+        $this->assertNotNull($gbp_currency);
+        $this->assertEquals($currency_api->rates->GBP, $gbp_currency->exchange_rate);
 
-            $this->assertEquals($currency_api->rates->GBP, $gbp_currency->exchange_rate);
-        } else {
-            $this->markTestSkipped('No API Key set');
-        }
     }
 
     public function testExchangeRateConversion()

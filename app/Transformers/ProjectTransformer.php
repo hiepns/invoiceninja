@@ -1,19 +1,27 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Transformers;
 
+use App\Models\Client;
 use App\Models\Document;
+use App\Models\Expense;
+use App\Models\Invoice;
 use App\Models\Project;
+use App\Models\Quote;
+use App\Models\Task;
+use App\Models\User;
 use App\Utils\Traits\MakesHash;
+use League\Fractal\Resource\Item;
 
 /**
  * class ProjectTransformer.
@@ -22,22 +30,95 @@ class ProjectTransformer extends EntityTransformer
 {
     use MakesHash;
 
-    protected $defaultIncludes = [
+    protected array $defaultIncludes = [
         'documents',
     ];
 
     /**
      * @var array
      */
-    protected $availableIncludes = [
-        'documents'
+    protected array $availableIncludes = [
+        'client',
+        'tasks',
+        'invoices',
+        'expenses',
+        'quotes',
+        'user',
+        'assigned_user',
     ];
+
+    public function includeUser(Project $project): ?Item
+    {
+        $transformer = new UserTransformer($this->serializer);
+
+        if (!$project->user) { //@phpstan-ignore-line
+            return null;
+        }
+
+        return $this->includeItem($project->user, $transformer, User::class);
+    }
+
+    public function includeAssignedUser(Project $project): ?Item
+    {
+        $transformer = new UserTransformer($this->serializer);
+
+        if (!$project->assigned_user) {
+            return null;
+        }
+
+        return $this->includeItem($project->assigned_user, $transformer, User::class);
+    }
 
     public function includeDocuments(Project $project)
     {
         $transformer = new DocumentTransformer($this->serializer);
 
+        // if($project->documents->count() > 0) {
         return $this->includeCollection($project->documents, $transformer, Document::class);
+        // }
+
+        // return null;
+    }
+
+    public function includeClient(Project $project): ?\League\Fractal\Resource\Item
+    {
+
+        if (!$project->client) {
+            nlog("Project {$project->hashed_id} does not have a client attached - this project is in a bad state");
+            return null;
+        }
+
+        $transformer = new ClientTransformer($this->serializer);
+
+        return $this->includeItem($project->client, $transformer, Client::class);
+    }
+
+    public function includeTasks(Project $project): \League\Fractal\Resource\Collection
+    {
+        $transformer = new TaskTransformer($this->serializer);
+
+        return $this->includeCollection($project->tasks, $transformer, Task::class);
+    }
+
+    public function includeInvoices(Project $project): \League\Fractal\Resource\Collection
+    {
+        $transformer = new InvoiceTransformer($this->serializer);
+
+        return $this->includeCollection($project->invoices, $transformer, Invoice::class);
+    }
+
+    public function includeExpenses(Project $project): \League\Fractal\Resource\Collection
+    {
+        $transformer = new ExpenseTransformer($this->serializer);
+
+        return $this->includeCollection($project->expenses, $transformer, Expense::class);
+    }
+
+    public function includeQuotes(Project $project): \League\Fractal\Resource\Collection
+    {
+        $transformer = new QuoteTransformer($this->serializer);
+
+        return $this->includeCollection($project->quotes, $transformer, Quote::class);
     }
 
     public function transform(Project $project)
@@ -48,7 +129,7 @@ class ProjectTransformer extends EntityTransformer
             'assigned_user_id' => (string) $this->encodePrimaryKey($project->assigned_user_id),
             'client_id' => (string) $this->encodePrimaryKey($project->client_id),
             'name' => $project->name ?: '',
-            'number' => $project->number,
+            'number' => $project->number ?: '',
             'created_at' => (int) $project->created_at,
             'updated_at' => (int) $project->updated_at,
             'archived_at' => (int) $project->deleted_at,
@@ -62,6 +143,11 @@ class ProjectTransformer extends EntityTransformer
             'custom_value2' => (string) $project->custom_value2 ?: '',
             'custom_value3' => (string) $project->custom_value3 ?: '',
             'custom_value4' => (string) $project->custom_value4 ?: '',
+            'color' => (string) $project->color ?: '',
+            'current_hours' => (int) $project->current_hours ?: 0,
+            'tags' => $this->transformTags($project),
+            'budgeted_amount' => (float) $project->budgeted_amount,
         ];
     }
+
 }

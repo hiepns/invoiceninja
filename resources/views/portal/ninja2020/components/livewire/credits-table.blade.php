@@ -2,7 +2,7 @@
     <div class="flex items-center justify-between">
         <div class="flex items-center">
             <span class="mr-2 text-sm hidden md:block">{{ ctrans('texts.per_page') }}</span>
-            <select wire:model="per_page" class="form-select py-1 text-sm">
+            <select wire:model.live="per_page" class="form-select py-1 text-sm">
                 <option>5</option>
                 <option selected>10</option>
                 <option>15</option>
@@ -15,6 +15,11 @@
             <table class="min-w-full shadow rounded border border-gray-200 mt-4 credits-table">
                 <thead>
                     <tr>
+                        <th class="px-6 py-3 text-xs font-medium leading-4 tracking-wider text-left text-white uppercase border-b border-gray-200 bg-primary">
+                            <span role="button" wire:click="sortBy('number')" class="cursor-pointer">
+                                {{ ctrans('texts.credit_number') }}
+                            </span>
+                        </th>
                         <th class="px-6 py-3 border-b border-gray-200 bg-primary text-left text-xs leading-4 font-medium text-white uppercase tracking-wider">
                             <span role="button" wire:click="sortBy('amount')" class="cursor-pointer">
                                 {{ ctrans('texts.amount') }}
@@ -32,7 +37,7 @@
                         </th>
                         <th class="px-6 py-3 border-b border-gray-200 bg-primary text-left text-xs leading-4 font-medium text-white uppercase tracking-wider">
                             <span role="button" wire:click="sortBy('public_notes')" class="cursor-pointer">
-                                {{ ctrans('texts.public_notes') }}
+                                {{ ctrans('texts.notes') }}
                             </span>
                         </th>
                         <th class="px-6 py-3 border-b border-gray-200 bg-primary"></th>
@@ -41,19 +46,22 @@
                 <tbody>
                     @forelse($credits as $credit)
                         <tr class="bg-white group hover:bg-gray-100">
-                            <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                                {{ $credit->number }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
                                 {{ App\Utils\Number::formatMoney($credit->amount, $credit->client) }}
                             </td>
-                            <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
                                 {{ App\Utils\Number::formatMoney($credit->balance, $credit->client) }}
                             </td>
-                            <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
-                                {{ $credit->formatDate($credit->date, $credit->client->date_format()) }}
+                            <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                                {{ $credit->translateDate($credit->date, $credit->client->date_format(), $credit->client->locale()) }}
                             </td>
-                            <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
-                                {{ empty($credit->public_notes) ? '/' : $credit->public_notes }}
+                            <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
+                                {{ $credit->public_notes }}
                             </td>
-                            <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500">
                                 <a href="{{ route('client.credit.show', $credit->hashed_id) }}" class="button-link text-primary">
                                     @lang('texts.view')
                                 </a>
@@ -61,7 +69,7 @@
                         </tr>
                     @empty
                         <tr class="bg-white group hover:bg-gray-100">
-                            <td class="px-6 py-4 whitespace-no-wrap text-sm leading-5 text-gray-500" colspan="100%">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm leading-5 text-gray-500" colspan="100%">
                                 {{ ctrans('texts.no_results') }}
                             </td>
                         </tr>
@@ -76,6 +84,6 @@
                 {{ ctrans('texts.showing_x_of', ['first' => $credits->firstItem(), 'last' => $credits->lastItem(), 'total' => $credits->total()]) }}
             </span>
         @endif
-        {{ $credits->links() }}
+        {{ $credits->links('portal/ninja2020/vendor/pagination') }}
     </div>
 </div>

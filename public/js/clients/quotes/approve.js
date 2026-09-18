@@ -1,2 +1,124 @@
-/*! For license information please see approve.js.LICENSE.txt */
-!function(e){var t={};function n(r){if(t[r])return t[r].exports;var u=t[r]={i:r,l:!1,exports:{}};return e[r].call(u.exports,u,u.exports,n),u.l=!0,u.exports}n.m=e,n.c=t,n.d=function(e,t,r){n.o(e,t)||Object.defineProperty(e,t,{enumerable:!0,get:r})},n.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},n.t=function(e,t){if(1&t&&(e=n(e)),8&t)return e;if(4&t&&"object"==typeof e&&e&&e.__esModule)return e;var r=Object.create(null);if(n.r(r),Object.defineProperty(r,"default",{enumerable:!0,value:e}),2&t&&"string"!=typeof e)for(var u in e)n.d(r,u,function(t){return e[t]}.bind(null,u));return r},n.n=function(e){var t=e&&e.__esModule?function(){return e.default}:function(){return e};return n.d(t,"a",t),t},n.o=function(e,t){return Object.prototype.hasOwnProperty.call(e,t)},n.p="/",n(n.s=10)}({10:function(e,t,n){e.exports=n("WuMn")},WuMn:function(e,t){function n(e,t){for(var n=0;n<t.length;n++){var r=t[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(e,r.key,r)}}var r=function(){function e(t,n){!function(e,t){if(!(e instanceof t))throw new TypeError("Cannot call a class as a function")}(this,e),this.shouldDisplaySignature=t,this.shouldDisplayTerms=n,this.termsAccepted=!1}var t,r,u;return t=e,(r=[{key:"submitForm",value:function(){document.getElementById("approve-form").submit()}},{key:"displaySignature",value:function(){document.getElementById("displaySignatureModal").removeAttribute("style");var e=new SignaturePad(document.getElementById("signature-pad"),{penColor:"rgb(0, 0, 0)"});this.signaturePad=e}},{key:"displayTerms",value:function(){document.getElementById("displayTermsModal").removeAttribute("style")}},{key:"handle",value:function(){var e=this;document.getElementById("approve-button").addEventListener("click",(function(){e.shouldDisplaySignature&&e.shouldDisplayTerms&&(e.displaySignature(),document.getElementById("signature-next-step").addEventListener("click",(function(){e.displayTerms(),document.getElementById("accept-terms-button").addEventListener("click",(function(){document.querySelector('input[name="signature"').value=e.signaturePad.toDataURL(),e.termsAccepted=!0,e.submitForm()}))}))),e.shouldDisplaySignature&&!e.shouldDisplayTerms&&(e.displaySignature(),document.getElementById("signature-next-step").addEventListener("click",(function(){document.querySelector('input[name="signature"').value=e.signaturePad.toDataURL(),e.submitForm()}))),!e.shouldDisplaySignature&&e.shouldDisplayTerms&&(e.displayTerms(),document.getElementById("accept-terms-button").addEventListener("click",(function(){e.termsAccepted=!0,e.submitForm()}))),e.shouldDisplaySignature||e.shouldDisplayTerms||e.submitForm()}))}}])&&n(t.prototype,r),u&&n(t,u),e}(),u=document.querySelector('meta[name="require-quote-signature"]').content,o=document.querySelector('meta[name="show-quote-terms"]').content;new r(Boolean(+u),Boolean(+o)).handle()}});
+/******/ (() => { // webpackBootstrap
+var __webpack_exports__ = {};
+/*!************************************************!*\
+  !*** ./resources/js/clients/quotes/approve.js ***!
+  \************************************************/
+function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, _toPropertyKey(descriptor.key), descriptor); } }
+function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); Object.defineProperty(Constructor, "prototype", { writable: false }); return Constructor; }
+function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return _typeof(key) === "symbol" ? key : String(key); }
+function _toPrimitive(input, hint) { if (_typeof(input) !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (_typeof(res) !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
+/**
+ * Invoice Ninja (https://invoiceninja.com)
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license 
+ */
+var Approve = /*#__PURE__*/function () {
+  function Approve(displaySignature, displayTerms, userInput) {
+    _classCallCheck(this, Approve);
+    this.shouldDisplaySignature = displaySignature;
+    this.shouldDisplayTerms = displayTerms;
+    this.shouldDisplayUserInput = userInput;
+    this.termsAccepted = false;
+  }
+  _createClass(Approve, [{
+    key: "submitForm",
+    value: function submitForm() {
+      document.getElementById('approve-form').submit();
+    }
+  }, {
+    key: "displaySignature",
+    value: function displaySignature() {
+      var displaySignatureModal = document.getElementById('displaySignatureModal');
+      displaySignatureModal.removeAttribute('style');
+      var signaturePad = new SignaturePad(document.getElementById('signature-pad'), {
+        penColor: 'rgb(0, 0, 0)'
+      });
+      signaturePad.onEnd = function () {
+        document.getElementById("signature-next-step").disabled = false;
+      };
+      this.signaturePad = signaturePad;
+    }
+  }, {
+    key: "displayTerms",
+    value: function displayTerms() {
+      var displayTermsModal = document.getElementById("displayTermsModal");
+      displayTermsModal.removeAttribute("style");
+    }
+  }, {
+    key: "displayInput",
+    value: function displayInput() {
+      var displayInputModal = document.getElementById("displayInputModal");
+      displayInputModal.removeAttribute("style");
+    }
+  }, {
+    key: "handle",
+    value: function handle() {
+      var _this = this;
+      document.getElementById("signature-next-step").disabled = true;
+      document.getElementById("close-button").addEventListener('click', function () {
+        var approveButton = document.getElementById("approve-button");
+        console.log('close button');
+        if (approveButton) approveButton.disabled = false;
+      });
+      document.getElementById("close-terms-button").addEventListener('click', function () {
+        var approveButton = document.getElementById("approve-button");
+        console.log('close terms-button');
+        if (approveButton) approveButton.disabled = false;
+      });
+      document.getElementById('approve-button').addEventListener('click', function () {
+        if (!_this.shouldDisplaySignature && !_this.shouldDisplayTerms && _this.shouldDisplayUserInput) {
+          _this.displayInput();
+          document.getElementById('input-next-step').addEventListener('click', function () {
+            document.querySelector('input[name="user_input"').value = document.getElementById('user_input').value;
+            _this.termsAccepted = true;
+            _this.submitForm();
+          });
+        }
+        if (_this.shouldDisplayUserInput) _this.displayInput();
+        if (_this.shouldDisplaySignature && _this.shouldDisplayTerms) {
+          _this.displaySignature();
+          document.getElementById('signature-next-step').addEventListener('click', function () {
+            _this.displayTerms();
+            document.getElementById('accept-terms-button').addEventListener('click', function () {
+              document.querySelector('input[name="signature"').value = _this.signaturePad.toDataURL();
+              document.querySelector('input[name="user_input"').value = document.getElementById('user_input').value;
+              _this.termsAccepted = true;
+              _this.submitForm();
+            });
+          });
+        }
+        if (_this.shouldDisplaySignature && !_this.shouldDisplayTerms) {
+          _this.displaySignature();
+          document.getElementById('signature-next-step').addEventListener('click', function () {
+            document.querySelector('input[name="signature"').value = _this.signaturePad.toDataURL();
+            document.querySelector('input[name="user_input"').value = document.getElementById('user_input').value;
+            _this.submitForm();
+          });
+        }
+        if (!_this.shouldDisplaySignature && _this.shouldDisplayTerms) {
+          _this.displayTerms();
+          document.getElementById('accept-terms-button').addEventListener('click', function () {
+            _this.termsAccepted = true;
+            _this.submitForm();
+          });
+        }
+        if (!_this.shouldDisplaySignature && !_this.shouldDisplayTerms && !_this.shouldDisplayUserInput) {
+          _this.submitForm();
+        }
+      });
+    }
+  }]);
+  return Approve;
+}();
+var signature = document.querySelector('meta[name="require-quote-signature"]').content;
+var terms = document.querySelector('meta[name="show-quote-terms"]').content;
+var user_input = document.querySelector('meta[name="accept-user-input"]').content;
+new Approve(Boolean(+signature), Boolean(+terms), Boolean(+user_input)).handle();
+/******/ })()
+;

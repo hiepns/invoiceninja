@@ -1,18 +1,20 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
 
 use App\Factory\CompanyTokenFactory;
 use App\Filters\TokenFilters;
+use App\Http\Requests\Token\BulkTokenRequest;
 use App\Http\Requests\Token\CreateTokenRequest;
 use App\Http\Requests\Token\DestroyTokenRequest;
 use App\Http\Requests\Token\EditTokenRequest;
@@ -21,10 +23,10 @@ use App\Http\Requests\Token\StoreTokenRequest;
 use App\Http\Requests\Token\UpdateTokenRequest;
 use App\Models\CompanyToken;
 use App\Repositories\TokenRepository;
+use App\Transformers\CompanyTokenHashedTransformer;
 use App\Transformers\CompanyTokenTransformer;
 use App\Utils\Traits\ChecksEntityStatus;
 use App\Utils\Traits\MakesHash;
-use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
@@ -50,6 +52,8 @@ class TokenController extends BaseController
         parent::__construct();
 
         $this->token_repo = $token_repo;
+
+        $this->middleware('password_protected')->only(['store', 'update']);
     }
 
     /**
@@ -61,8 +65,7 @@ class TokenController extends BaseController
      *      description="Lists company tokens.
      *
      *   Query parameters can be added to performed more fine grained filtering of the tokens, these are handled by the TokenFilters class which defines the methods available",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(ref="#/components/parameters/index"),
@@ -86,10 +89,16 @@ class TokenController extends BaseController
      *       ),
      *     )
      * @param TokenFilters $filters
-     * @return Response|mixed
+     * @return Response| \Illuminate\Http\JsonResponse|mixed
      */
     public function index(TokenFilters $filters)
     {
+        if(!auth()->user()->isAdmin()){
+            abort(403, 'Unauthorized action.');
+        }
+        
+        $this->entity_transformer = CompanyTokenHashedTransformer::class;
+
         $tokens = CompanyToken::filter($filters);
 
         return $this->listResponse($tokens);
@@ -100,7 +109,7 @@ class TokenController extends BaseController
      *
      * @param ShowTokenRequest $request
      * @param CompanyToken $token
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -109,8 +118,7 @@ class TokenController extends BaseController
      *      tags={"tokens"},
      *      summary="Shows a token",
      *      description="Displays a token by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -155,7 +163,7 @@ class TokenController extends BaseController
      *
      * @param EditTokenRequest $request
      * @param CompanyToken $token
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -164,8 +172,7 @@ class TokenController extends BaseController
      *      tags={"tokens"},
      *      summary="Shows a token for editting",
      *      description="Displays a token by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -202,6 +209,8 @@ class TokenController extends BaseController
      */
     public function edit(EditTokenRequest $request, CompanyToken $token)
     {
+        $this->entity_transformer = CompanyTokenHashedTransformer::class;
+
         return $this->itemResponse($token);
     }
 
@@ -210,7 +219,7 @@ class TokenController extends BaseController
      *
      * @param UpdateTokenRequest $request
      * @param CompanyToken $token
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      *
@@ -220,8 +229,7 @@ class TokenController extends BaseController
      *      tags={"tokens"},
      *      summary="Updates a token",
      *      description="Handles the updating of a token by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -262,6 +270,8 @@ class TokenController extends BaseController
             return $request->disallowUpdate();
         }
 
+        $this->entity_transformer = CompanyTokenHashedTransformer::class;
+
         $token = $this->token_repo->save($request->all(), $token);
 
         return $this->itemResponse($token->fresh());
@@ -271,7 +281,7 @@ class TokenController extends BaseController
      * Show the form for creating a new resource.
      *
      * @param CreateTokenRequest $request
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      *
@@ -281,8 +291,7 @@ class TokenController extends BaseController
      *      tags={"tokens"},
      *      summary="Gets a new blank token object",
      *      description="Returns a blank object with default values",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -308,7 +317,11 @@ class TokenController extends BaseController
      */
     public function create(CreateTokenRequest $request)
     {
-        $token = CompanyTokenFactory::create(auth()->user()->company()->id, auth()->user()->id, auth()->user()->account_id);
+
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $token = CompanyTokenFactory::create($user->company()->id, auth()->user()->id, auth()->user()->account_id);
 
         return $this->itemResponse($token);
     }
@@ -317,7 +330,7 @@ class TokenController extends BaseController
      * Store a newly created resource in storage.
      *
      * @param StoreTokenRequest $request
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      *
@@ -327,8 +340,7 @@ class TokenController extends BaseController
      *      tags={"tokens"},
      *      summary="Adds a token",
      *      description="Adds an token to a company",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -354,7 +366,11 @@ class TokenController extends BaseController
      */
     public function store(StoreTokenRequest $request)
     {
-        $company_token = CompanyTokenFactory::create(auth()->user()->company()->id, auth()->user()->id, auth()->user()->account_id);
+
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $company_token = CompanyTokenFactory::create($user->company()->id, auth()->user()->id, auth()->user()->account_id);
 
         $token = $this->token_repo->save($request->all(), $company_token);
 
@@ -366,7 +382,7 @@ class TokenController extends BaseController
      *
      * @param DestroyTokenRequest $request
      * @param CompanyToken $token
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @throws \Exception
@@ -376,8 +392,7 @@ class TokenController extends BaseController
      *      tags={"tokens"},
      *      summary="Deletes a token",
      *      description="Handles the deletion of a token by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -416,13 +431,15 @@ class TokenController extends BaseController
         //may not need these destroy routes as we are using actions to 'archive/delete'
         $token->delete();
 
+        $this->entity_transformer = CompanyTokenHashedTransformer::class;
+
         return $this->itemResponse($token);
     }
 
     /**
      * Perform bulk actions on the list view.
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Post(
@@ -431,8 +448,7 @@ class TokenController extends BaseController
      *      tags={"tokens"},
      *      summary="Performs bulk actions on an array of tokens",
      *      description="",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/index"),
      *      @OA\RequestBody(
@@ -470,19 +486,24 @@ class TokenController extends BaseController
      *       ),
      *     )
      */
-    public function bulk()
+    public function bulk(BulkTokenRequest $request)
     {
-        $action = request()->input('action');
+        $this->entity_transformer = CompanyTokenHashedTransformer::class;
 
-        $ids = request()->input('ids');
-        $tokens = CompanyToken::withTrashed()->find($this->transformKeys($ids));
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        $tokens->each(function ($token, $key) use ($action) {
-            if (auth()->user()->can('edit', $token)) {
+        $action = $request->input('action');
+
+        $ids = $request->input('ids');
+        $tokens = CompanyToken::withTrashed()->company()->find($ids);
+
+        $tokens->each(function ($token, $key) use ($action, $user) {
+            if ($user->can('edit', $token)) {
                 $this->token_repo->{$action}($token);
             }
         });
 
-        return $this->listResponse(CompanyToken::withTrashed()->whereIn('id', $this->transformKeys($ids)));
+        return $this->listResponse(CompanyToken::withTrashed()->company()->whereIn('id', $ids));
     }
 }

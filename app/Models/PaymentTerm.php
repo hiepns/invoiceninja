@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Models;
@@ -15,19 +16,47 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Class PaymentTerm.
+ *
+ * @property int $id
+ * @property int|null $num_days
+ * @property string|null $name
+ * @property int|null $company_id
+ * @property int|null $user_id
+ * @property bool $is_deleted
+ * @property int|null $created_at
+ * @property int|null $updated_at
+ * @property int|null $deleted_at
+ * @property-read mixed $hashed_id
+ * @method static \Illuminate\Database\Eloquent\Builder|BaseModel company()
+ * @method static \Illuminate\Database\Eloquent\Builder|BaseModel exclude($columns)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm filter(\App\Filters\QueryFilters $filters)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm query()
+ * @method static \Illuminate\Database\Eloquent\Builder|BaseModel scope()
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm whereCompanyId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm whereIsDeleted($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm whereName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm whereNumDays($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm whereUserId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm withTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder|PaymentTerm withoutTrashed()
+ * @mixin \Eloquent
  */
 class PaymentTerm extends BaseModel
 {
     use SoftDeletes;
+    use Filterable;
 
     /**
      * @var bool
      */
     public $timestamps = true;
-    /**
-     * @var array
-     */
-    protected $dates = ['deleted_at'];
 
     protected $fillable = ['num_days'];
 

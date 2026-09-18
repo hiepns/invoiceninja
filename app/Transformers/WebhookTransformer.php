@@ -1,5 +1,13 @@
 <?php
-
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
 namespace App\Transformers;
 
 use App\Models\Webhook;
@@ -9,12 +17,12 @@ class WebhookTransformer extends EntityTransformer
 {
     use MakesHash;
 
-    protected $defaultIncludes = [];
+    protected array $defaultIncludes = [];
 
     /**
      * @var array
      */
-    protected $availableIncludes = [];
+    protected array $availableIncludes = [];
 
     /**
      * @param Webhook $webhook
@@ -34,6 +42,8 @@ class WebhookTransformer extends EntityTransformer
             'target_url' => $webhook->target_url ? (string) $webhook->target_url : '',
             'event_id' => (string) $webhook->event_id,
             'format' => (string) $webhook->format,
+            'rest_method' => (string) $webhook->rest_method ?: '',
+            'headers' => $webhook->headers ?: [],
         ];
     }
 }

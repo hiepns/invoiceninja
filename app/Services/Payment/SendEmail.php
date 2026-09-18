@@ -1,41 +1,34 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Services\Payment;
 
 use App\Jobs\Payment\EmailPayment;
+use App\Models\ClientContact;
+use App\Models\Payment;
+use Illuminate\Database\QueryException;
 
 class SendEmail
 {
-    public $payment;
-
-    public $contact;
-
-    public function __construct($payment, $contact)
-    {
-        $this->payment = $payment;
-
-        $this->contact = $contact;
-    }
+    public function __construct(public Payment $payment, public ?ClientContact $contact) {}
 
     /**
      * Builds the correct template to send.
-     * @return void
      */
     public function run()
     {
-        $this->payment->client->contacts->each(function ($contact) {
-            if ($contact->send_email && $contact->email) {
-                EmailPayment::dispatchNow($this->payment, $this->payment->company, $contact);
-            }
-        });
+        $this->payment->load('company', 'invoices');
+
+        EmailPayment::dispatch($this->payment, $this->payment->company, $this->contact);
+
     }
 }

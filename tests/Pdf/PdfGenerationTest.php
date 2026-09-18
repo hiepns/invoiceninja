@@ -1,130 +1,53 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Pdf;
 
-use Spatie\Browsershot\Browsershot;
+use Beganovich\Snappdf\Snappdf;
 use Tests\TestCase;
 
 /**
- * @test
- //@covers  App\DataMapper\BaseSettings
+ *
+ *   App\DataMapper\BaseSettings
  */
 class PdfGenerationTest extends TestCase
 {
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
-    }
 
-    private function makePdf($header, $footer, $html, $pdf)
-    {
-        Browsershot::html($html)
-            ->setNodeBinary(config('ninja.system.node_path'))
-            ->setNpmBinary(config('ninja.system.npm_path'))
-            //->showBrowserHeaderAndFooter()
-            //->headerHtml($header)
-            //->footerHtml($footer)
-            ->waitUntilNetworkIdle()
-            //->margins(10,10,10,10)
-            ->noSandbox()
-            ->savePdf($pdf);
+        if (config('ninja.testvars.travis') !== false) {
+            $this->markTestSkipped('Skip test for GH Actions');
+        }
+
     }
 
     public function testPdfGeneration()
     {
-        $html = file_get_contents(base_path().'/tests/Pdf/invoice.html');
-        $pdf = base_path().'/tests/Pdf/invoice.pdf';
+        $pdf = new Snappdf();
 
-        $header = '<div style="font-size:14px;"<header></header>';
+        if (config('ninja.snappdf_chromium_path')) {
+            $pdf->setChromiumPath(config('ninja.snappdf_chromium_path'));
+        }
 
-        $footer = ' <div style="font-size:14px;"><footer>
-                <span class="pageNumber"></span> / <span class="totalPages"></span>
-            </footer></div>';
+        if (config('ninja.snappdf_chromium_arguments')) {
+            $pdf->clearChromiumArguments();
+            $pdf->addChromiumArguments(config('ninja.snappdf_chromium_arguments'));
+        }
 
-        $this->makePdf($header, $footer, $html, $pdf);
+        $pdf = $pdf
+            ->setHtml('<h1>Invoice Ninja</h1>')
+            ->generate();
 
-        $this->assertTrue(file_exists($pdf));
-
-        unlink($pdf);
-    }
-
-    public function testPdfGeneration2()
-    {
-        $html = file_get_contents(base_path().'/tests/Pdf/invoice2.html');
-        $pdf = base_path().'/tests/Pdf/invoice2.pdf';
-
-        $header = '<div style="font-size:14px;"<header></header>';
-
-        $footer = ' <div style="font-size:14px;"><footer>
-                <span class="pageNumber"></span> / <span class="totalPages"></span>
-            </footer></div>';
-
-        $this->makePdf($header, $footer, $html, $pdf);
-
-        $this->assertTrue(file_exists($pdf));
-
-        unlink($pdf);
-    }
-
-    public function testPdfGeneration3()
-    {
-        $html = file_get_contents(base_path().'/tests/Pdf/invoice3.html');
-        $pdf = base_path().'/tests/Pdf/invoice3.pdf';
-
-        $header = '<div style="font-size:14px;"<header></header>';
-
-        $footer = ' <div style="font-size:14px;"><footer>
-                <span class="pageNumber"></span> / <span class="totalPages"></span>
-            </footer></div>';
-
-        $this->makePdf($header, $footer, $html, $pdf);
-
-        $this->assertTrue(file_exists($pdf));
-
-        unlink($pdf);
-    }
-
-    public function testPdfGeneration4()
-    {
-        $html = file_get_contents(base_path().'/tests/Pdf/invoice4.html');
-        $pdf = base_path().'/tests/Pdf/invoice4.pdf';
-
-        $header = '<div style="font-size:14px;"<header></header>';
-
-        $footer = ' <div style="font-size:14px;"><footer>
-                <span class="pageNumber"></span> / <span class="totalPages"></span>
-            </footer></div>';
-
-        $this->makePdf($header, $footer, $html, $pdf);
-
-        $this->assertTrue(file_exists($pdf));
-
-        unlink($pdf);
-    }
-
-    public function testPdfGeneration5()
-    {
-        $html = file_get_contents(base_path().'/tests/Pdf/invoice5.html');
-        $pdf = base_path().'/tests/Pdf/invoice5.pdf';
-
-        $header = '<div style="font-size:14px;"<header></header>';
-
-        $footer = ' <div style="font-size:14px;"><footer>
-                <span class="pageNumber"></span> / <span class="totalPages"></span>
-            </footer></div>';
-
-        $this->makePdf($header, $footer, $html, $pdf);
-
-        $this->assertTrue(file_exists($pdf));
-
-        unlink($pdf);
+        $this->assertNotNull($pdf);
     }
 }

@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\Shop;
@@ -32,7 +33,7 @@ class StoreShopClientRequest extends Request
      */
     private $company;
 
-    public function authorize() : bool
+    public function authorize(): bool
     {
         return true;
     }
@@ -43,27 +44,27 @@ class StoreShopClientRequest extends Request
             $documents = count($this->input('documents'));
 
             foreach (range(0, $documents) as $index) {
-                $rules['documents.'.$index] = 'file|mimes:png,ai,svg,jpeg,tiff,pdf,gif,psd,txt,doc,xls,ppt,xlsx,docx,pptx|max:20000';
+                $rules['documents.' . $index] = 'file|mimes:png,ai,jpeg,tiff,pdf,gif,psd,txt,doc,xls,ppt,xlsx,docx,pptx|max:20000';
             }
         } elseif ($this->input('documents')) {
-            $rules['documents'] = 'file|mimes:png,ai,svg,jpeg,tiff,pdf,gif,psd,txt,doc,xls,ppt,xlsx,docx,pptx|max:20000';
+            $rules['documents'] = 'file|mimes:png,ai,jpeg,tiff,pdf,gif,psd,txt,doc,xls,ppt,xlsx,docx,pptx|max:20000';
         }
 
         /* Ensure we have a client name, and that all emails are unique*/
         //$rules['name'] = 'required|min:1';
-        $rules['id_number'] = 'unique:clients,id_number,'.$this->id.',id,company_id,'.$this->company_id;
+        $rules['id_number'] = 'unique:clients,id_number,' . $this->id . ',id,company_id,' . $this->company_id;
         $rules['settings'] = new ValidClientGroupSettingsRule();
         $rules['contacts.*.email'] = 'nullable|distinct';
         $rules['contacts.*.password'] = [
-                                        'nullable',
-                                        'sometimes',
-                                        'string',
-                                        'min:7',             // must be at least 10 characters in length
-                                        'regex:/[a-z]/',      // must contain at least one lowercase letter
-                                        'regex:/[A-Z]/',      // must contain at least one uppercase letter
-                                        'regex:/[0-9]/',      // must contain at least one digit
-                                        //'regex:/[@$!%*#?&.]/', // must contain a special character
-                                        ];
+            'nullable',
+            'sometimes',
+            'string',
+            'min:7',             // must be at least 10 characters in length
+            'regex:/[a-z]/',      // must contain at least one lowercase letter
+            'regex:/[A-Z]/',      // must contain at least one uppercase letter
+            'regex:/[0-9]/',      // must contain at least one digit
+            //'regex:/[@$!%*#?&.]/', // must contain a special character
+        ];
 
         if ($this->company->account->isFreeHostedClient()) {
             $rules['hosted_clients'] = new CanStoreClientsRule($this->company->id);
@@ -72,14 +73,12 @@ class StoreShopClientRequest extends Request
         return $rules;
     }
 
-    protected function prepareForValidation()
+    public function prepareForValidation()
     {
-        $this->company = Company::where('company_key', request()->header('X-API-COMPANY-KEY'))->firstOrFail();
+        $this->company = Company::query()->where('company_key', request()->header('X-API-COMPANY-KEY'))->firstOrFail();
 
         $input = $this->all();
 
-        //@todo implement feature permissions for > 100 clients
-        //
         $settings = ClientSettings::defaults();
 
         if (array_key_exists('settings', $input) && ! empty($input['settings'])) {
@@ -95,7 +94,7 @@ class StoreShopClientRequest extends Request
         //is no settings->currency_id is set then lets dive in and find either a group or company currency all the below may be redundant!!
         if (! property_exists($settings, 'currency_id') && isset($input['group_settings_id'])) {
             $input['group_settings_id'] = $this->decodePrimaryKey($input['group_settings_id']);
-            $group_settings = GroupSetting::find($input['group_settings_id']);
+            $group_settings = GroupSetting::query()->find($input['group_settings_id']);
 
             if ($group_settings && property_exists($group_settings->settings, 'currency_id') && isset($group_settings->settings->currency_id)) {
                 $settings->currency_id = (string) $group_settings->settings->currency_id;
@@ -110,7 +109,7 @@ class StoreShopClientRequest extends Request
             $settings->currency_id = $this->getCurrencyCode($input['currency_code']);
         }
 
-        $input['settings'] = $settings;
+        $input['settings'] = (array) $settings;
 
         if (isset($input['contacts'])) {
             foreach ($input['contacts'] as $key => $contact) {
@@ -157,23 +156,27 @@ class StoreShopClientRequest extends Request
 
     private function getCountryCode($country_code)
     {
-        $countries = Cache::get('countries');
 
-        $country = $countries->filter(function ($item) use ($country_code) {
+        /** @var \Illuminate\Support\Collection<\App\Models\Country> */
+        $countries = app('countries');
+
+        $country = $countries->first(function ($item) use ($country_code) {
             return $item->iso_3166_2 == $country_code || $item->iso_3166_3 == $country_code;
-        })->first();
+        });
 
-        return (string) $country->id;
+        return $country ? (string) $country->id : '';
     }
 
     private function getCurrencyCode($code)
     {
-        $currencies = Cache::get('currencies');
 
-        $currency = $currencies->filter(function ($item) use ($code) {
+        /** @var \Illuminate\Support\Collection<\App\Models\Country> */
+        $currencies = app('currencies');
+
+        $currency = $currencies->first(function ($item) use ($code) {
             return $item->code == $code;
-        })->first();
+        });
 
-        return (string) $currency->id;
+        return $currency ? (string) $currency->id : '';
     }
 }

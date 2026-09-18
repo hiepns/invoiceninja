@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Middleware;
@@ -18,9 +19,10 @@ class TrimStrings extends Middleware
     /**
      * The names of the attributes that should not be trimmed.
      *
-     * @var array
+     * @var array<int,string>
      */
     protected $except = [
+        'current_password',
         'password',
         'password_confirmation',
     ];

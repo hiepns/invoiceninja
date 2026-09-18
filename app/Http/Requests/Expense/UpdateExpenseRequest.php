@@ -1,17 +1,20 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\Expense;
 
 use App\Http\Requests\Request;
+use App\Models\Expense;
+use App\Models\Project;
 use App\Utils\Traits\ChecksEntityStatus;
 use App\Utils\Traits\MakesHash;
 use Illuminate\Validation\Rule;
@@ -21,49 +24,89 @@ class UpdateExpenseRequest extends Request
     use MakesHash;
     use ChecksEntityStatus;
 
+    /** @var class-string */
+    protected ?string $tag_entity_type = Expense::class;
+
     /**
      * Determine if the user is authorized to make this request.
      *
      * @return bool
      */
-    public function authorize() : bool
+    public function authorize(): bool
     {
-        return auth()->user()->can('edit', $this->expense);
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return $user->can('edit', $this->expense);
     }
 
     public function rules()
     {
-        /* Ensure we have a client name, and that all emails are unique*/
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
 
-        $rules['country_id'] = 'integer|nullable';
-        //$rules['id_number'] = 'unique:clients,id_number,,id,company_id,' . auth()->user()->company()->id;
-        $rules['contacts.*.email'] = 'nullable|distinct';
+        /* Ensure we have a client name, and that all emails are unique*/
+        $rules = [];
 
         if (isset($this->number)) {
-            $rules['number'] = Rule::unique('expenses')->where('company_id', auth()->user()->company()->id)->ignore($this->expense->id);
+            $rules['number'] = Rule::unique('expenses')->where('company_id', $user->company()->id)->ignore($this->expense->id);
         }
 
-        return $this->globalRules($rules);
+        if ($this->client_id) {
+            $rules['client_id'] = 'bail|sometimes|integer|exists:clients,id,company_id,' . $user->company()->id;
+        }
+
+        $rules['category_id'] = 'bail|sometimes|nullable|exists:expense_categories,id,company_id,' . $user->company()->id . ',is_deleted,0';
+        $rules['transaction_id'] = 'bail|sometimes|nullable|exists:bank_transactions,id,company_id,' . $user->company()->id;
+        $rules['documents'] = 'bail|sometimes|array';
+        $rules['documents.*'] = $this->fileValidation();
+        $rules['amount'] = ['sometimes', 'bail', 'nullable', 'numeric', 'max:99999999999999'];
+
+        $rules['file'] = 'bail|sometimes|array';
+        $rules['file.*'] = $this->fileValidation();
+
+        $rules = $this->globalRules($rules);
+
+        $rules['invoice_id'] = 'bail|sometimes|nullable|exists:invoices,id,company_id,' . $user->company()->id;
+
+        return $rules;
     }
 
-    public function messages()
+    public function prepareForValidation()
     {
-        return [
-            'unique' => ctrans('validation.unique', ['attribute' => 'email']),
-            'email' => ctrans('validation.email', ['attribute' => 'email']),
-            'name.required' => ctrans('validation.required', ['attribute' => 'name']),
-            'required' => ctrans('validation.required', ['attribute' => 'email']),
-        ];
-    }
 
-    protected function prepareForValidation()
-    {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
         $input = $this->all();
 
         $input = $this->decodePrimaryKeys($input);
 
-        if (array_key_exists('category_id', $input) && is_string($input['category_id'])) {
-            $input['category_id'] = $this->decodePrimaryKey($input['category_id']);
+        if ($this->file('file') instanceof \Illuminate\Http\UploadedFile) {
+            $this->files->set('file', [$this->file('file')]);
+        }
+
+        if (isset($input['documents'])) {
+            unset($input['documents']);
+        }
+
+        if (! array_key_exists('currency_id', $input) || strlen($input['currency_id'] ?? '') == 0) {
+            $input['currency_id'] = (string) $user->company()->settings->currency_id;
+        }
+
+        if (isset($input['exchange_rate']) && $input['exchange_rate'] == 0) {
+            $input['exchange_rate'] = 1;
+        }
+
+        /* Ensure the project is related */
+        if (array_key_exists('project_id', $input) && isset($input['project_id'])) {
+            $project = Project::withTrashed()->where('id', $input['project_id'])->company()->first();
+
+            if ($project) {
+                $input['client_id'] = $project->client_id;
+            } else {
+                unset($input['project_id']);
+            }
         }
 
         $this->replace($input);

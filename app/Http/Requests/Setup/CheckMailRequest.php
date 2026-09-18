@@ -1,18 +1,19 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
-
 
 namespace App\Http\Requests\Setup;
 
 use App\Http\Requests\Request;
+use Illuminate\Support\Facades\Schema;
 
 class CheckMailRequest extends Request
 {
@@ -23,7 +24,16 @@ class CheckMailRequest extends Request
      */
     public function authorize()
     {
-        return true; /* Return something that will check if setup has been completed, like Ninja::hasCompletedSetup() */
+        if (!\App\Utils\Ninja::isSelfHost()) {
+            return false;
+        }
+
+        try {
+            return !Schema::hasTable('accounts') || \App\Models\Account::count() == 0;
+        } catch (\Throwable $e) {
+            // If database connection fails, allow the request (we're checking the DB)
+            return true;
+        }
     }
 
     /**
@@ -33,17 +43,14 @@ class CheckMailRequest extends Request
      */
     public function rules()
     {
-        info($this->driver);
-
         return [
-            'driver' => ['required', 'in:smtp,mail,sendmail,log'],
-            'from_name' => ['required_unless:driver,log'],
-            'from_address' => ['required_unless:driver,log'],
-            'username' => ['required_unless:driver,log'],
-            'host' => ['required_unless:driver,log'],
-            'port' => ['required_unless:driver,log'],
-            'encryption' => ['required_unless:driver,log'],
-            'password' => ['required_unless:driver,log'],
+            'mail_driver' => 'required',
+            'encryption' => 'required_unless:mail_driver,log',
+            'mail_host' => 'required_unless:mail_driver,log',
+            'mail_username' => 'required_unless:mail_driver,log',
+            'mail_name' => 'required_unless:mail_driver,log',
+            'mail_address' => 'required_unless:mail_driver,log',
+            'mail_password' => 'required_unless:mail_driver,log',
         ];
     }
 }

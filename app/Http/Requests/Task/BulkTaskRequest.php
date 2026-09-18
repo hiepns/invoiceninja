@@ -1,25 +1,23 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
-
 
 namespace App\Http\Requests\Task;
 
 use App\Http\Requests\Request;
 use App\Models\Task;
-use App\Utils\Traits\BulkOptions;
+use Illuminate\Validation\Rule;
 
 class BulkTaskRequest extends Request
 {
-    use BulkOptions;
-
     /**
      * Determine if the user is authorized to make this request.
      *
@@ -27,7 +25,7 @@ class BulkTaskRequest extends Request
      */
     public function authorize()
     {
-        return auth()->user()->can(auth()->user()->isAdmin(), Task::class);
+        return true;
     }
 
     /**
@@ -37,13 +35,47 @@ class BulkTaskRequest extends Request
      */
     public function rules()
     {
-        $rules = $this->getGlobalRules();
 
-        /* We don't require IDs on bulk storing. */
-        if ($this->action !== self::$STORE_METHOD) {
-            $rules['ids'] = ['required'];
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        return [
+            'action' => 'required|string|in:archive,restore,delete,bulk_update,template,start,stop',
+            'template' => 'sometimes|string',
+            'template_id' => 'sometimes|string',
+            'send_email' => 'sometimes|bool',
+            'ids' => ['required','bail','array'],
+            'column' => ['required_if:action,bulk_update', 'string', Rule::in(\App\Models\Task::$bulk_update_columns)],
+            'new_value' => ['required_if:action,bulk_update|string'],
+        ];
+
+    }
+
+    public function withValidator($validator)
+    {
+        if ($validator->errors()->isNotEmpty()) {
+            return;
         }
 
-        return $rules;
+        $validator->after(function ($validator) {
+
+            if ($this->action == 'bulk_update') {
+                
+                $user = auth()->user();
+
+                $permissions = Task::withTrashed()
+                                ->whereIn('id', $this->transformKeys($this->ids))
+                                ->get()
+                                ->first(function ($task) use ($user) {
+                                    return $user->cannot('edit', $task);
+                                });       
+
+                if ($permissions->isEmpty()) {
+                    $validator->errors()->add('ids', 'You are not authorized to update these tasks.');
+                }
+            
+            }
+        });
+
     }
 }

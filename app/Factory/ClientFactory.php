@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Factory;
@@ -17,9 +18,9 @@ use Illuminate\Support\Str;
 
 class ClientFactory
 {
-    public static function create(int $company_id, int $user_id) :Client
+    public static function create(int $company_id, int $user_id): Client
     {
-        $client = new Client;
+        $client = new Client();
         $client->company_id = $company_id;
         $client->user_id = $user_id;
         $client->name = '';
@@ -28,13 +29,11 @@ class ClientFactory
         $client->public_notes = '';
         $client->balance = 0;
         $client->paid_to_date = 0;
-        $client->country_id = 4;
-        $client->is_deleted = 0;
+        $client->country_id = null;
+        $client->is_deleted = false;
         $client->client_hash = Str::random(40);
         $client->settings = ClientSettings::defaults();
-
-        // $client_contact = ClientContactFactory::create($company_id, $user_id);
-        // $client->contacts->add($client_contact);
+        $client->classification = 'business';
 
         return $client;
     }

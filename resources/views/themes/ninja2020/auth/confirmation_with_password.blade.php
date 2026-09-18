@@ -1,4 +1,4 @@
-@extends('portal.ninja2020.layout.clean')
+@extends('themes.ninja2020.clean')
 @section('meta_title', ctrans('texts.set_password'))
 
 @section('body')
@@ -11,11 +11,16 @@
 
                 <form action="{{ url()->current() }}" method="post" class="mt-6">
                     @csrf
+                    <input type="hidden" name="user_id" value="{{ $user_id }}">
+                    <input type="hidden" name="confirmation_code" value="{{ $confirmation_code }}">
+                    @if(request()->has('react'))
+                    <input type="hidden" name="react" value="true">
+                    @endif
                     <div class="flex flex-col mt-4">
                         <label for="password" class="input-label">{{ ctrans('texts.password') }}</label>
                         <input type="password" name="password" id="password"
                                class="input"
-                               autofocus>
+                               autofocus required>
                         @error('password')
                         <div class="validation validation-fail">
                             {{ $message }}
@@ -26,7 +31,7 @@
                         <label for="password" class="input-label">{{ ctrans('texts.password_confirmation') }}</label>
                         <input type="password" name="password_confirmation" id="password_confirmation"
                                class="input"
-                               autofocus>
+                               autofocus required>
                         @error('password_confirmation')
                         <div class="validation validation-fail">
                             {{ $message }}

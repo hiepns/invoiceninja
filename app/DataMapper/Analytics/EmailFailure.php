@@ -1,17 +1,20 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\DataMapper\Analytics;
 
-class EmailFailure
+use Turbo124\Beacon\ExampleMetric\GenericMixedMetric;
+
+class EmailFailure extends GenericMixedMetric
 {
     /**
      * The type of Sample.
@@ -35,7 +38,6 @@ class EmailFailure
      *
      * date("Y-m-d H:i:s")
      *
-     * @var DateTime
      */
     public $datetime;
 
@@ -45,7 +47,7 @@ class EmailFailure
      *
      * @var string
      */
-    public $string_metric5 = '';
+    public $string_metric5 = 'stub';
 
     /**
      * The exception string
@@ -53,5 +55,23 @@ class EmailFailure
      *
      * @var string
      */
-    public $string_metric6 = '';
+    public $string_metric6 = 'stub';
+
+    /**
+     * The counter
+     * set to 1.
+     *
+     */
+    public $int_metric1 = 1;
+
+    /**
+     * Company Key
+     * @var string
+     */
+    public $string_metric7 = '';
+
+    public function __construct($string_metric7)
+    {
+        $this->string_metric7 = $string_metric7;
+    }
 }

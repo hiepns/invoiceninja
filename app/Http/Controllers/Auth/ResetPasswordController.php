@@ -1,17 +1,22 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Libraries\MultiDB;
+use App\Models\Account;
+use App\Models\Company;
+use App\Utils\Ninja;
 use Illuminate\Foundation\Auth\ResetsPasswords;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -52,14 +57,52 @@ class ResetPasswordController extends Controller
 
     public function showResetForm(Request $request, $token = null)
     {
-        return $this->render('auth.passwords.reset', ['root' => 'themes', 'token' => $token]);
+        $company = false;
+
+        if (Ninja::isHosted()) {
+            MultiDB::findAndSetDbByCompanyKey($request->session()->get('company_key'));
+            /** @var \App\Models\Company $company **/
+            $company = Company::where('company_key', $request->session()->get('company_key'))->first();
+        }
+
+        if ($company) {
+            $account = $company->account;
+        } else {
+            $account = Account::first();
+        }
+
+
+        return $this->render('auth.passwords.reset', [
+            'root'    => 'themes',
+            'token'   => $this->normalize((string) $token),
+            'account' => $account,
+            'email'   => $this->normalize((string) $request->query('email', '')),
+        ]);
+    }
+
+    /**
+     * Idempotently URL-decode an inbound link value (handles single and
+     * double encoding from SPA / email link rewriters). rawurldecode is
+     * used so '+' is preserved (plus-addressed emails).
+     */
+    private function normalize(string $value): string
+    {
+        for ($i = 0; $i < 3 && str_contains($value, '%'); $i++) {
+            $decoded = rawurldecode($value);
+            if ($decoded === $value) {
+                break;
+            }
+            $value = $decoded;
+        }
+
+        return trim($value);
     }
 
     /**
      * Reset the given user's password.
      *
      * @param Request $request
-     * @return RedirectResponse|JsonResponse
+     * @return \Illuminate\Http\RedirectResponse | \Illuminate\Http\RedirectResponse|JsonResponse
      * @throws \Illuminate\Validation\ValidationException
      */
     public function reset(Request $request)
@@ -92,6 +135,34 @@ class ResetPasswordController extends Controller
     {
         auth()->logout();
 
+        if (request()->has('react') || request()->hasHeader('X-React')) {
+            return redirect(config('ninja.react_url') . '/#/login');
+        }
+
         return redirect('/');
     }
+
+    /**
+     * Get the response for a successful password reset.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  string  $response
+     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
+     */
+    protected function sendResetResponse(Request $request, $response)
+    {
+        if ($request->wantsJson()) {
+            return new JsonResponse(['message' => trans($response)], 200);
+        }
+
+        if ($request->hasHeader('X-REACT') || $request->has('react')) {
+            return redirect(config('ninja.react_url') . '/#/login');
+        } else {
+            return redirect('/#/login');
+        }
+
+        // return redirect($this->redirectPath())
+        //                     ->with('status', trans($response));
+    }
+
 }

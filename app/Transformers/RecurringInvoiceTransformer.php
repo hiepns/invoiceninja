@@ -1,18 +1,21 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Transformers;
 
+use App\Models\Activity;
+use App\Models\Backup;
+use App\Models\Client;
 use App\Models\Document;
-use App\Models\Invoice;
 use App\Models\RecurringInvoice;
 use App\Models\RecurringInvoiceInvitation;
 use App\Utils\Traits\MakesHash;
@@ -21,47 +24,42 @@ class RecurringInvoiceTransformer extends EntityTransformer
 {
     use MakesHash;
 
-    protected $defaultIncludes = [
+    protected array $defaultIncludes = [
         'invitations',
         'documents',
     ];
 
-    protected $availableIncludes = [
-        'invitations',
-        'documents',
-    //    'payments',
-    //    'client',
+    protected array $availableIncludes = [
+        'activities',
+        'client',
+        'location',
     ];
 
-    /*
-        public function includeInvoiceItems(Invoice $invoice)
-        {
-            $transformer = new InvoiceItemTransformer($this->serializer);
+    public function includeLocation(RecurringInvoice $invoice)
+    {
+        $transformer = new LocationTransformer($this->serializer);
 
-            return $this->includeCollection($invoice->invoice_items, $transformer, ENTITY_INVOICE_ITEM);
+        if (!$invoice->location) {
+            return null;
         }
 
-        public function includeInvitations(Invoice $invoice)
-        {
-            $transformer = new InvitationTransformer($this->account, $this->serializer);
+        return $this->includeItem($invoice->location, $transformer, \App\Models\Location::class);
+    }
 
-            return $this->includeCollection($invoice->invitations, $transformer, ENTITY_INVITATION);
-        }
+    public function includeHistory(RecurringInvoice $invoice)
+    {
+        $transformer = new InvoiceHistoryTransformer($this->serializer);
 
-        public function includePayments(Invoice $invoice)
-        {
-            $transformer = new PaymentTransformer($this->account, $this->serializer, $invoice);
+        return $this->includeCollection($invoice->history, $transformer, Backup::class);
+    }
 
-            return $this->includeCollection($invoice->payments, $transformer, ENTITY_PAYMENT);
-        }
+    public function includeActivities(RecurringInvoice $invoice)
+    {
+        $transformer = new ActivityTransformer($this->serializer);
 
-        public function includeClient(Invoice $invoice)
-        {
-            $transformer = new ClientTransformer($this->account, $this->serializer);
+        return $this->includeCollection($invoice->activities, $transformer, Activity::class);
+    }
 
-            return $this->includeItem($invoice->client, $transformer, ENTITY_CLIENT);
-        }
-    */
     public function includeInvitations(RecurringInvoice $invoice)
     {
         $transformer = new RecurringInvoiceInvitationTransformer($this->serializer);
@@ -75,10 +73,17 @@ class RecurringInvoiceTransformer extends EntityTransformer
 
         return $this->includeCollection($invoice->documents, $transformer, Document::class);
     }
-    
+
+    public function includeClient(RecurringInvoice $invoice)
+    {
+        $transformer = new ClientTransformer($this->serializer);
+
+        return $this->includeItem($invoice->client, $transformer, Client::class);
+    }
+
     public function transform(RecurringInvoice $invoice)
     {
-        return [
+        $data = [
             'id' => $this->encodePrimaryKey($invoice->id),
             'user_id' => $this->encodePrimaryKey($invoice->user_id),
             'project_id' => $this->encodePrimaryKey($invoice->project_id),
@@ -98,7 +103,8 @@ class RecurringInvoiceTransformer extends EntityTransformer
             'po_number' => $invoice->po_number ?: '',
             'date' => $invoice->date ?: '',
             'last_sent_date' => $invoice->last_sent_date ?: '',
-            'next_send_date' => $invoice->next_send_date ?: '',
+            'next_send_date' => $invoice->next_send_date_client ?: '',
+            'next_send_datetime' => $invoice->next_send_date ?: '',
             'due_date' => $invoice->due_date ?: '',
             'terms' => $invoice->terms ?: '',
             'public_notes' => $invoice->public_notes ?: '',
@@ -134,10 +140,21 @@ class RecurringInvoiceTransformer extends EntityTransformer
             'entity_type' => 'recurringInvoice',
             'frequency_id' => (string) $invoice->frequency_id,
             'remaining_cycles' => (int) $invoice->remaining_cycles,
-            'recurring_dates' => (array) $invoice->recurringDates(),
+            'recurring_dates' => [],
             'auto_bill' => (string) $invoice->auto_bill,
             'auto_bill_enabled' => (bool) $invoice->auto_bill_enabled,
             'due_date_days' => (string) $invoice->due_date_days ?: '',
+            'paid_to_date' => (float) $invoice->paid_to_date,
+            'subscription_id' => (string) $this->encodePrimaryKey($invoice->subscription_id),
+            'e_invoice' => $invoice->e_invoice ?: new \stdClass(),
+            'location_id' => $this->encodePrimaryKey($invoice->location_id),
+            'tags' => $this->transformTags($invoice),
         ];
+
+        if (request()->has('show_dates') && request()->query('show_dates') == 'true') {
+            $data['recurring_dates'] = (array) $invoice->recurringDates();
+        }
+
+        return $data;
     }
 }

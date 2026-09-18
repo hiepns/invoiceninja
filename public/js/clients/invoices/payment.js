@@ -1,2 +1,110 @@
-/*! For license information please see payment.js.LICENSE.txt */
-!function(e){var t={};function n(r){if(t[r])return t[r].exports;var i=t[r]={i:r,l:!1,exports:{}};return e[r].call(i.exports,i,i.exports,n),i.l=!0,i.exports}n.m=e,n.c=t,n.d=function(e,t,r){n.o(e,t)||Object.defineProperty(e,t,{enumerable:!0,get:r})},n.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},n.t=function(e,t){if(1&t&&(e=n(e)),8&t)return e;if(4&t&&"object"==typeof e&&e&&e.__esModule)return e;var r=Object.create(null);if(n.r(r),Object.defineProperty(r,"default",{enumerable:!0,value:e}),2&t&&"string"!=typeof e)for(var i in e)n.d(r,i,function(t){return e[t]}.bind(null,i));return r},n.n=function(e){var t=e&&e.__esModule?function(){return e.default}:function(){return e};return n.d(t,"a",t),t},n.o=function(e,t){return Object.prototype.hasOwnProperty.call(e,t)},n.p="/",n(n.s=5)}({5:function(e,t,n){e.exports=n("FuOr")},FuOr:function(e,t){function n(e,t){for(var n=0;n<t.length;n++){var r=t[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(e,r.key,r)}}var r=function(){function e(t,n){!function(e,t){if(!(e instanceof t))throw new TypeError("Cannot call a class as a function")}(this,e),this.shouldDisplayTerms=t,this.shouldDisplaySignature=n,this.termsAccepted=!1}var t,r,i;return t=e,(r=[{key:"handleMethodSelect",value:function(e){var t=this;document.getElementById("company_gateway_id").value=e.dataset.companyGatewayId,document.getElementById("payment_method_id").value=e.dataset.gatewayTypeId,this.shouldDisplaySignature&&!this.shouldDisplayTerms&&(this.displayTerms(),document.getElementById("accept-terms-button").addEventListener("click",(function(){t.termsAccepted=!0,t.submitForm()}))),!this.shouldDisplaySignature&&this.shouldDisplayTerms&&(this.displaySignature(),document.getElementById("signature-next-step").addEventListener("click",(function(){document.querySelector('input[name="signature"').value=t.signaturePad.toDataURL(),t.submitForm()}))),this.shouldDisplaySignature&&this.shouldDisplayTerms&&(this.displaySignature(),document.getElementById("signature-next-step").addEventListener("click",(function(){t.displayTerms(),document.getElementById("accept-terms-button").addEventListener("click",(function(){document.querySelector('input[name="signature"').value=t.signaturePad.toDataURL(),t.termsAccepted=!0,t.submitForm()}))}))),this.shouldDisplaySignature||this.shouldDisplayTerms||this.submitForm()}},{key:"submitForm",value:function(){document.getElementById("payment-form").submit()}},{key:"displayTerms",value:function(){document.getElementById("displayTermsModal").removeAttribute("style")}},{key:"displaySignature",value:function(){document.getElementById("displaySignatureModal").removeAttribute("style");var e=new SignaturePad(document.getElementById("signature-pad"),{penColor:"rgb(0, 0, 0)"});this.signaturePad=e}},{key:"handle",value:function(){var e=this;document.querySelectorAll(".dropdown-gateway-button").forEach((function(t){t.addEventListener("click",(function(){return e.handleMethodSelect(t)}))}))}}])&&n(t.prototype,r),i&&n(t,i),e}(),i=document.querySelector('meta[name="require-invoice-signature"]').content,u=document.querySelector('meta[name="show-invoice-terms"]').content;new r(Boolean(+i),Boolean(+u)).handle()}});
+/******/ (() => { // webpackBootstrap
+var __webpack_exports__ = {};
+/*!**************************************************!*\
+  !*** ./resources/js/clients/invoices/payment.js ***!
+  \**************************************************/
+function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, _toPropertyKey(descriptor.key), descriptor); } }
+function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); Object.defineProperty(Constructor, "prototype", { writable: false }); return Constructor; }
+function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return _typeof(key) === "symbol" ? key : String(key); }
+function _toPrimitive(input, hint) { if (_typeof(input) !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (_typeof(res) !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
+/**
+ * Invoice Ninja (https://invoiceninja.com)
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license 
+ */
+var Payment = /*#__PURE__*/function () {
+  function Payment(displayTerms, displaySignature) {
+    _classCallCheck(this, Payment);
+    this.shouldDisplayTerms = displayTerms;
+    this.shouldDisplaySignature = displaySignature;
+    this.termsAccepted = false;
+    this.submitting = false;
+  }
+  _createClass(Payment, [{
+    key: "handleMethodSelect",
+    value: function handleMethodSelect(element) {
+      var _this = this;
+      document.getElementById("company_gateway_id").value = element.dataset.companyGatewayId;
+      document.getElementById("payment_method_id").value = element.dataset.gatewayTypeId;
+      if (this.shouldDisplaySignature && !this.shouldDisplayTerms) {
+        if (this.signaturePad && this.signaturePad.isEmpty()) alert("Please sign");
+        this.displayTerms();
+        document.getElementById("accept-terms-button").addEventListener("click", function () {
+          _this.termsAccepted = true;
+          _this.submitForm();
+        });
+      }
+      if (!this.shouldDisplaySignature && this.shouldDisplayTerms) {
+        this.displaySignature();
+        document.getElementById("signature-next-step").addEventListener("click", function () {
+          document.querySelector('input[name="signature"').value = _this.signaturePad.toDataURL();
+          _this.submitForm();
+        });
+      }
+      if (this.shouldDisplaySignature && this.shouldDisplayTerms) {
+        this.displaySignature();
+        document.getElementById("signature-next-step").addEventListener("click", function () {
+          _this.displayTerms();
+          document.getElementById("accept-terms-button").addEventListener("click", function () {
+            document.querySelector('input[name="signature"').value = _this.signaturePad.toDataURL();
+            _this.termsAccepted = true;
+            _this.submitForm();
+          });
+        });
+      }
+      if (!this.shouldDisplaySignature && !this.shouldDisplayTerms) {
+        this.submitForm();
+      }
+    }
+  }, {
+    key: "submitForm",
+    value: function submitForm() {
+      this.submitting = true;
+      document.getElementById("payment-form").submit();
+    }
+  }, {
+    key: "displayTerms",
+    value: function displayTerms() {
+      var displayTermsModal = document.getElementById("displayTermsModal");
+      displayTermsModal.removeAttribute("style");
+    }
+  }, {
+    key: "displaySignature",
+    value: function displaySignature() {
+      document.getElementById("signature-next-step").disabled = true;
+      var displaySignatureModal = document.getElementById("displaySignatureModal");
+      displaySignatureModal.removeAttribute("style");
+      var signaturePad = new SignaturePad(document.getElementById("signature-pad"), {
+        penColor: "rgb(0, 0, 0)"
+      });
+      signaturePad.onEnd = function () {
+        document.getElementById("signature-next-step").disabled = false;
+      };
+      this.signaturePad = signaturePad;
+    }
+  }, {
+    key: "handle",
+    value: function handle() {
+      var _this2 = this;
+      document.querySelectorAll(".dropdown-gateway-button").forEach(function (element) {
+        element.addEventListener("click", function () {
+          if (!_this2.submitting) {
+            _this2.handleMethodSelect(element);
+          }
+        });
+      });
+    }
+  }]);
+  return Payment;
+}();
+var signature = document.querySelector('meta[name="require-invoice-signature"]').content;
+var terms = document.querySelector('meta[name="show-invoice-terms"]').content;
+new Payment(Boolean(+signature), Boolean(+terms)).handle();
+/******/ })()
+;

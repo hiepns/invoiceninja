@@ -1,28 +1,46 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Unit;
 
 use App\Libraries\Currency\Conversion\CurrencyApi;
+use App\Models\Currency;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
- * @test
- * @covers  App\Libraries\Currency\Conversion\CurrencyApi
+ *
+ *   App\Libraries\Currency\Conversion\CurrencyApi
  */
 class CurrencyApiTest extends TestCase
 {
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
+    }
+
+    public function testConversionAudToEur()
+    {
+        $converter = new CurrencyApi();
+
+        $converted_amount = $converter->convert(100, 12, 3);
+
+        $aud_currency = Currency::find(12);
+        $eur_currency = Currency::find(3);
+
+        $converted_synthetic = 100 / ($aud_currency->exchange_rate / $eur_currency->exchange_rate);
+
+        $this->assertEquals(round($converted_synthetic, 2), round($converted_amount, 2));
+
     }
 
     public function testCurrencyConversionWorking()

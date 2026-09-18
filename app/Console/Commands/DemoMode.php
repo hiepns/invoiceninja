@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Console\Commands;
@@ -15,12 +16,15 @@ use App\DataMapper\CompanySettings;
 use App\Events\Invoice\InvoiceWasCreated;
 use App\Factory\InvoiceFactory;
 use App\Factory\InvoiceItemFactory;
+use App\Factory\RecurringInvoiceFactory;
 use App\Helpers\Invoice\InvoiceSum;
 use App\Jobs\Company\CreateCompanyPaymentTerms;
 use App\Jobs\Company\CreateCompanyTaskStatuses;
 use App\Jobs\Ninja\CompanySizeCheck;
 use App\Jobs\Util\VersionCheck;
 use App\Models\Account;
+use App\Models\BankIntegration;
+use App\Models\BankTransaction;
 use App\Models\Client;
 use App\Models\ClientContact;
 use App\Models\Company;
@@ -30,12 +34,15 @@ use App\Models\Expense;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\Quote;
+use App\Models\RecurringInvoice;
 use App\Models\Task;
+use App\Models\TaskStatus;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorContact;
 use App\Repositories\InvoiceRepository;
 use App\Utils\Ninja;
+use App\Utils\Traits\AppSetup;
 use App\Utils\Traits\GeneratesCounter;
 use App\Utils\Traits\MakesHash;
 use Carbon\Carbon;
@@ -48,30 +55,19 @@ use Illuminate\Support\Str;
 
 class DemoMode extends Command
 {
-    use MakesHash, GeneratesCounter;
+    use MakesHash;
+    use GeneratesCounter;
+    use AppSetup;
 
-    protected $name = 'ninja:demo-mode';
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
     protected $signature = 'ninja:demo-mode';
 
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
     protected $description = 'Setup demo mode';
 
     protected $invoice_repo;
 
-    public function __construct(InvoiceRepository $invoice_repo)
+    public function __construct()
     {
         parent::__construct();
-
-        $this->invoice_repo = $invoice_repo;
     }
 
     /**
@@ -83,72 +79,60 @@ class DemoMode extends Command
     {
         set_time_limit(0);
 
-        $cached_tables = config('ninja.cached_tables');
-
-        foreach ($cached_tables as $name => $class) {
-            if (! Cache::has($name)) {
-                // check that the table exists in case the migration is pending
-                if (! Schema::hasTable((new $class())->getTable())) {
-                    continue;
-                }
-                if ($name == 'payment_terms') {
-                    $orderBy = 'num_days';
-                } elseif ($name == 'fonts') {
-                    $orderBy = 'sort_order';
-                } elseif (in_array($name, ['currencies', 'industries', 'languages', 'countries', 'banks'])) {
-                    $orderBy = 'name';
-                } else {
-                    $orderBy = 'id';
-                }
-                $tableData = $class::orderBy($orderBy)->get();
-                if ($tableData->count()) {
-                    Cache::forever($name, $tableData);
-                }
-            }
+        if (config('ninja.is_docker') || Ninja::isHosted()) {
+            return;
         }
+
+        $this->invoice_repo = new InvoiceRepository();
 
         $this->info('Migrating');
         Artisan::call('migrate:fresh --force');
 
         $this->info('Seeding');
+
         Artisan::call('db:seed --force');
+        Artisan::call('cache:clear');
 
         $this->info('Seeding Random Data');
         $this->createSmallAccount();
 
-        VersionCheck::dispatchNow();
+        (new VersionCheck())->handle();
 
-        CompanySizeCheck::dispatchNow();
+        (new CompanySizeCheck())->handle();
     }
 
     private function createSmallAccount()
     {
         $faker = \Faker\Factory::create();
 
-        $this->count = 50;
+        $this->count = 25;
 
         $this->info('Creating Small Account and Company');
 
-        $account = Account::factory()->create();
+        $account = Account::factory()->create([
+            "set_react_as_default_ap" => 0,
+        ]);
         $company = Company::factory()->create([
             'account_id' => $account->id,
             'slack_webhook_url' => config('ninja.notification.slack'),
             'enabled_modules' => 32767,
             'company_key' => 'KEY',
             'enable_shop_api' => true,
+            'markdown_email_enabled' => true,
+            'markdown_enabled' => false,
         ]);
 
         $settings = $company->settings;
 
-        $settings->name = $faker->company;
-        $settings->address1 = $faker->buildingNumber;
-        $settings->address2 = $faker->streetAddress;
-        $settings->city = $faker->city;
-        $settings->state = $faker->state;
-        $settings->postal_code = $faker->postcode;
-        $settings->website = $faker->url;
+        $settings->name = $faker->company();
+        $settings->address1 = $faker->buildingNumber();
+        $settings->address2 = $faker->streetAddress();
+        $settings->city = $faker->city();
+        $settings->state = $faker->state();
+        $settings->postal_code = $faker->postcode();
+        $settings->website = $faker->url();
         $settings->vat_number = (string) $faker->numberBetween(123456789, 987654321);
-        $settings->phone = (string) $faker->phoneNumber;
+        $settings->phone = (string) $faker->phoneNumber();
 
         $company->settings = $settings;
         $company->save();
@@ -163,13 +147,14 @@ class DemoMode extends Command
                 'account_id' => $account->id,
                 'email' => 'small@example.com',
                 'confirmation_code' => $this->createDbHash(config('database.default')),
+                'email_verified_at' => now(),
             ]);
         }
 
-        CreateCompanyPaymentTerms::dispatchNow($company, $user);
-        CreateCompanyTaskStatuses::dispatchNow($company, $user);
+        (new CreateCompanyPaymentTerms($company, $user))->handle();
+        (new CreateCompanyTaskStatuses($company, $user))->handle();
 
-        $company_token = new CompanyToken;
+        $company_token = new CompanyToken();
         $company_token->user_id = $user->id;
         $company_token->company_id = $company->id;
         $company_token->account_id = $account->id;
@@ -185,7 +170,7 @@ class DemoMode extends Command
             'is_admin' => 1,
             'is_locked' => 0,
             'notifications' => CompanySettings::notificationDefaults(),
-           // 'permissions' => '',
+            // 'permissions' => '',
             'settings' => null,
         ]);
 
@@ -197,14 +182,16 @@ class DemoMode extends Command
                 'password'          => Hash::make('Password0'),
                 'account_id' => $account->id,
                 'confirmation_code' => $this->createDbHash(config('database.default')),
+                'email_verified_at' => now(),
             ]);
 
-            $company_token = new CompanyToken;
+            $company_token = new CompanyToken();
             $company_token->user_id = $u2->id;
             $company_token->company_id = $company->id;
             $company_token->account_id = $account->id;
             $company_token->name = 'test token';
             $company_token->token = 'TOKEN';
+            $company_token->is_system = true;
             $company_token->save();
 
             $u2->companies()->attach($company->id, [
@@ -219,15 +206,27 @@ class DemoMode extends Command
         }
 
         Product::factory()->count(50)->create([
-                'user_id' => $user->id,
-                'company_id' => $company->id,
-            ]);
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
 
-        $this->info('Creating '.$this->count.' clients');
+        $bi = BankIntegration::factory()->create([
+            'account_id' => $account->id,
+            'company_id' => $company->id,
+            'user_id' => $user->id,
+        ]);
+
+        BankTransaction::factory()->count(50)->create([
+            'bank_integration_id' => $bi->id,
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
+
+        $this->info('Creating ' . $this->count . ' clients');
 
         for ($x = 0; $x < $this->count; $x++) {
             $z = $x + 1;
-            $this->info('Creating client # '.$z);
+            $this->info('Creating client # ' . $z);
 
             $this->createClient($company, $user, $u2->id);
         }
@@ -235,74 +234,55 @@ class DemoMode extends Command
         for ($x = 0; $x < $this->count; $x++) {
             $client = $company->clients->random();
 
-            $this->info('creating entities for client #'.$client->id);
+            $this->info('creating entities for client #' . $client->id);
             $this->createInvoice($client, $u2->id);
 
-            // for($y=0; $y<($this->count); $y++){
-            //     $this->info("creating invoice #{$y} for client #".$client->id);
-            // }
+            $this->createRecurringInvoice($client, $u2->id);
 
             $client = $company->clients->random();
             $this->createCredit($client, $u2->id);
 
-            // for($y=0; $y<($this->count); $y++){
-            //     $this->info("creating credit #{$y} for client #".$client->id);
-            // }
-
             $client = $company->clients->random();
             $this->createQuote($client, $u2->id);
-
-            // for($y=0; $y<($this->count); $y++){
-            //     $this->info("creating quote #{$y}  for client #".$client->id);
-            // }
 
             $client = $company->clients->random();
             $this->createExpense($client);
 
-            //$this->info("creating expense for client #".$client->id);
-
             $client = $company->clients->random();
             $this->createVendor($client, $u2->id);
-
-            // $this->info("creating vendor for client #".$client->id);
 
             $client = $company->clients->random();
             $this->createTask($client, $u2->id);
 
-            // $this->info("creating task for client #".$client->id);
-
             $client = $company->clients->random();
             $this->createProject($client, $u2->id);
-
-            // $this->info("creating project for client #".$client->id);
         }
     }
 
     private function createClient($company, $user, $assigned_user_id = null)
     {
-
         // dispatch(function () use ($company, $user) {
 
         // });
         $client = Client::factory()->create([
-                'user_id' => $user->id,
-                'company_id' => $company->id,
-            ]);
+            'user_id' => $user->id,
+            'company_id' => $company->id,
+        ]);
 
         ClientContact::factory()->create([
-                    'user_id' => $user->id,
-                    'client_id' => $client->id,
-                    'company_id' => $company->id,
-                    'is_primary' => 1,
-                ]);
+            'user_id' => $user->id,
+            'client_id' => $client->id,
+            'company_id' => $company->id,
+            'is_primary' => 1,
+        ]);
 
         ClientContact::factory()->count(rand(1, 5))->create([
-                    'user_id' => $user->id,
-                    'client_id' => $client->id,
-                    'company_id' => $company->id,
-                ]);
+            'user_id' => $user->id,
+            'client_id' => $client->id,
+            'company_id' => $company->id,
+        ]);
 
-        $client->id_number = $this->getNextClientNumber($client);
+        $client->number = $this->getNextClientNumber($client);
 
         $settings = $client->settings;
         $settings->currency_id = (string) rand(1, 3);
@@ -319,49 +299,63 @@ class DemoMode extends Command
     private function createExpense($client)
     {
         Expense::factory()->count(rand(1, 5))->create([
-                'user_id' => $client->user_id,
-                'client_id' => $client->id,
-                'company_id' => $client->company_id,
-            ]);
+            'user_id' => $client->user_id,
+            'client_id' => $client->id,
+            'company_id' => $client->company_id,
+        ]);
+
+        Expense::all()->each(function ($expense) {
+            $expense->number = $this->getNextExpenseNumber($expense);
+            $expense->save();
+        });
     }
 
     private function createVendor($client, $assigned_user_id = null)
     {
         $vendor = Vendor::factory()->create([
-                'user_id' => $client->user_id,
-                'company_id' => $client->company_id,
-            ]);
+            'user_id' => $client->user_id,
+            'company_id' => $client->company_id,
+        ]);
 
         VendorContact::factory()->create([
-                'user_id' => $client->user->id,
-                'vendor_id' => $vendor->id,
-                'company_id' => $client->company_id,
-                'is_primary' => 1,
-            ]);
+            'user_id' => $client->user->id,
+            'vendor_id' => $vendor->id,
+            'company_id' => $client->company_id,
+            'is_primary' => 1,
+        ]);
 
         VendorContact::factory()->count(rand(1, 5))->create([
-                'user_id' => $client->user->id,
-                'vendor_id' => $vendor->id,
-                'company_id' => $client->company_id,
-                'is_primary' => 0,
-            ]);
+            'user_id' => $client->user->id,
+            'vendor_id' => $vendor->id,
+            'company_id' => $client->company_id,
+            'is_primary' => 0,
+        ]);
+
+        $vendor->number = $this->getNextVendorNumber($vendor);
+        $vendor->save();
     }
 
     private function createTask($client, $assigned_user_id = null)
     {
-        $vendor = Task::factory()->create([
-                'user_id' => $client->user->id,
-                'company_id' => $client->company_id,
-            ]);
+        $task = Task::factory()->create([
+            'user_id' => $client->user->id,
+            'company_id' => $client->company_id,
+            'client_id' => $client->id,
+        ]);
+
+        $task->status_id = TaskStatus::all()->random()->id;
+
+        $task->number = $this->getNextTaskNumber($task);
+        $task->save();
     }
 
     private function createProject($client, $assigned_user_id = null)
     {
         $project = Project::factory()->create([
-                'user_id' => $client->user->id,
-                'company_id' => $client->company_id,
-                'client_id' => $client->id,
-            ]);
+            'user_id' => $client->user->id,
+            'company_id' => $client->company_id,
+            'client_id' => $client->id,
+        ]);
 
         $project->number = $this->getNextProjectNumber($project);
         $project->save();
@@ -385,22 +379,22 @@ class DemoMode extends Command
         $invoice->line_items = $this->buildLineItems(rand(1, 10));
         $invoice->uses_inclusive_taxes = false;
 
-        if (rand(0, 1)) {
-            $invoice->tax_name1 = 'GST';
-            $invoice->tax_rate1 = 10.00;
-        }
+        // if (rand(0, 1)) {
+        //     $invoice->tax_name1 = 'GST';
+        //     $invoice->tax_rate1 = 10.00;
+        // }
 
-        if (rand(0, 1)) {
-            $invoice->tax_name2 = 'VAT';
-            $invoice->tax_rate2 = 17.50;
-        }
+        // if (rand(0, 1)) {
+        //     $invoice->tax_name2 = 'VAT';
+        //     $invoice->tax_rate2 = 17.50;
+        // }
 
-        if (rand(0, 1)) {
-            $invoice->tax_name3 = 'CA Sales Tax';
-            $invoice->tax_rate3 = 5;
-        }
+        // if (rand(0, 1)) {
+        //     $invoice->tax_name3 = 'CA Sales Tax';
+        //     $invoice->tax_rate3 = 5;
+        // }
 
-        // $invoice->custom_value1 = $faker->date;
+        // $invoice->custom_value1 = $faker->date();
         // $invoice->custom_value2 = rand(0, 1) ? 'yes' : 'no';
 
         $invoice->save();
@@ -431,6 +425,59 @@ class DemoMode extends Command
         event(new InvoiceWasCreated($invoice, $invoice->company, Ninja::eventVars()));
     }
 
+    private function createRecurringInvoice($client, $assigned_user_id = null)
+    {
+        $faker = \Faker\Factory::create();
+
+        $invoice = RecurringInvoiceFactory::create($client->company->id, $client->user->id); //stub the company and user_id
+        $invoice->client_id = $client->id;
+        $invoice->frequency_id = RecurringInvoice::FREQUENCY_MONTHLY;
+        $invoice->last_sent_date = now()->subMonth();
+        $invoice->next_send_date = now()->addMonthNoOverflow();
+
+        if ((bool) rand(0, 1)) {
+            $dateable = Carbon::now()->subDays(rand(0, 90));
+        } else {
+            $dateable = Carbon::now()->addDays(rand(0, 90));
+        }
+
+        $invoice->date = $dateable;
+
+        $invoice->line_items = $this->buildLineItems(rand(1, 10));
+        $invoice->uses_inclusive_taxes = false;
+
+        // if (rand(0, 1)) {
+        //     $invoice->tax_name1 = 'GST';
+        //     $invoice->tax_rate1 = 10.00;
+        // }
+
+        // if (rand(0, 1)) {
+        //     $invoice->tax_name2 = 'VAT';
+        //     $invoice->tax_rate2 = 17.50;
+        // }
+
+        // if (rand(0, 1)) {
+        //     $invoice->tax_name3 = 'CA Sales Tax';
+        //     $invoice->tax_rate3 = 5;
+        // }
+
+        // $invoice->custom_value1 = $faker->date();
+        // $invoice->custom_value2 = rand(0, 1) ? 'yes' : 'no';
+
+        $invoice->save();
+
+        $invoice_calc = new InvoiceSum($invoice);
+        $invoice_calc->build();
+
+        $invoice = $invoice_calc->getInvoice();
+
+        if (rand(0, 1)) {
+            $invoice->assigned_user_id = $assigned_user_id;
+        }
+        $invoice->number = $this->getNextRecurringInvoiceNumber($client, $invoice);
+        $invoice->save();
+    }
+
     private function createCredit($client, $assigned_user_id = null)
     {
         $faker = \Faker\Factory::create();
@@ -448,20 +495,20 @@ class DemoMode extends Command
         $credit->line_items = $this->buildLineItems(rand(1, 10));
         $credit->uses_inclusive_taxes = false;
 
-        if (rand(0, 1)) {
-            $credit->tax_name1 = 'GST';
-            $credit->tax_rate1 = 10.00;
-        }
+        // if (rand(0, 1)) {
+        //     $credit->tax_name1 = 'GST';
+        //     $credit->tax_rate1 = 10.00;
+        // }
 
-        if (rand(0, 1)) {
-            $credit->tax_name2 = 'VAT';
-            $credit->tax_rate2 = 17.50;
-        }
+        // if (rand(0, 1)) {
+        //     $credit->tax_name2 = 'VAT';
+        //     $credit->tax_rate2 = 17.50;
+        // }
 
-        if (rand(0, 1)) {
-            $credit->tax_name3 = 'CA Sales Tax';
-            $credit->tax_rate3 = 5;
-        }
+        // if (rand(0, 1)) {
+        //     $credit->tax_name3 = 'CA Sales Tax';
+        //     $credit->tax_rate3 = 5;
+        // }
 
         $credit->save();
 
@@ -503,20 +550,20 @@ class DemoMode extends Command
         $quote->line_items = $this->buildLineItems(rand(1, 10));
         $quote->uses_inclusive_taxes = false;
 
-        if (rand(0, 1)) {
-            $quote->tax_name1 = 'GST';
-            $quote->tax_rate1 = 10.00;
-        }
+        // if (rand(0, 1)) {
+        //     $quote->tax_name1 = 'GST';
+        //     $quote->tax_rate1 = 10.00;
+        // }
 
-        if (rand(0, 1)) {
-            $quote->tax_name2 = 'VAT';
-            $quote->tax_rate2 = 17.50;
-        }
+        // if (rand(0, 1)) {
+        //     $quote->tax_name2 = 'VAT';
+        //     $quote->tax_rate2 = 17.50;
+        // }
 
-        if (rand(0, 1)) {
-            $quote->tax_name3 = 'CA Sales Tax';
-            $quote->tax_rate3 = 5;
-        }
+        // if (rand(0, 1)) {
+        //     $quote->tax_name3 = 'CA Sales Tax';
+        //     $quote->tax_rate3 = 5;
+        // }
 
         $quote->save();
 
@@ -544,20 +591,20 @@ class DemoMode extends Command
             $item->quantity = 1;
             //$item->cost = 10;
 
-            if (rand(0, 1)) {
-                $item->tax_name1 = 'GST';
-                $item->tax_rate1 = 10.00;
-            }
+            // if (rand(0, 1)) {
+            //     $item->tax_name1 = 'GST';
+            //     $item->tax_rate1 = 10.00;
+            // }
 
-            if (rand(0, 1)) {
-                $item->tax_name1 = 'VAT';
-                $item->tax_rate1 = 17.50;
-            }
+            // if (rand(0, 1)) {
+            //     $item->tax_name1 = 'VAT';
+            //     $item->tax_rate1 = 17.50;
+            // }
 
-            if (rand(0, 1)) {
-                $item->tax_name1 = 'Sales Tax';
-                $item->tax_rate1 = 5;
-            }
+            // if (rand(0, 1)) {
+            //     $item->tax_name1 = 'Sales Tax';
+            //     $item->tax_rate1 = 5;
+            // }
 
             $product = Product::all()->random();
 
@@ -575,31 +622,4 @@ class DemoMode extends Command
         return $line_items;
     }
 
-    private function warmCache()
-    {
-        /* Warm up the cache !*/
-        $cached_tables = config('ninja.cached_tables');
-
-        foreach ($cached_tables as $name => $class) {
-            if (! Cache::has($name)) {
-                // check that the table exists in case the migration is pending
-                if (! Schema::hasTable((new $class())->getTable())) {
-                    continue;
-                }
-                if ($name == 'payment_terms') {
-                    $orderBy = 'num_days';
-                } elseif ($name == 'fonts') {
-                    $orderBy = 'sort_order';
-                } elseif (in_array($name, ['currencies', 'industries', 'languages', 'countries', 'banks'])) {
-                    $orderBy = 'name';
-                } else {
-                    $orderBy = 'id';
-                }
-                $tableData = $class::orderBy($orderBy)->get();
-                if ($tableData->count()) {
-                    Cache::forever($name, $tableData);
-                }
-            }
-        }
-    }
 }

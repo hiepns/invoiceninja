@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Integration;
 
 use App\Models\Company;
@@ -19,7 +21,7 @@ use Tests\MockAccountData;
 use Tests\TestCase;
 
 /**
- * @test
+ *
  */
 class UploadLogoTest extends TestCase
 {
@@ -27,13 +29,19 @@ class UploadLogoTest extends TestCase
     use DatabaseTransactions;
     use MakesHash;
 
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
         $this->makeTestData();
 
         Company::reguard();
+
+
+        if (config('ninja.testvars.travis') !== false) {
+            $this->markTestSkipped('Skip test, no need to run in GH Actions');
+        }
+
     }
 
     public function testLogoUploadWorks()
@@ -46,9 +54,9 @@ class UploadLogoTest extends TestCase
         ];
 
         $response = $this->withHeaders([
-                'X-API-SECRET' => config('ninja.api_secret'),
-                'X-API-TOKEN' => $this->token,
-            ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $data);
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $data);
 
         $response->assertStatus(200);
 
@@ -71,9 +79,9 @@ class UploadLogoTest extends TestCase
         ];
 
         $response = $this->withHeaders([
-                'X-API-SECRET' => config('ninja.api_secret'),
-                'X-API-TOKEN' => $this->token,
-            ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $data);
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $data);
 
         //$acc = $response->json();
 
@@ -89,9 +97,9 @@ class UploadLogoTest extends TestCase
         ];
 
         $response = $this->withHeaders([
-                'X-API-SECRET' => config('ninja.api_secret'),
-                'X-API-TOKEN' => $this->token,
-            ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $data);
+            'X-API-SECRET' => config('ninja.api_secret'),
+            'X-API-TOKEN' => $this->token,
+        ])->put('/api/v1/companies/'.$this->encodePrimaryKey($this->company->id), $data);
 
         $response->assertStatus(200);
     }

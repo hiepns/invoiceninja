@@ -1,2 +1,61 @@
-/*! For license information please see stripe-sofort.js.LICENSE.txt */
-!function(e){var t={};function n(r){if(t[r])return t[r].exports;var o=t[r]={i:r,l:!1,exports:{}};return e[r].call(o.exports,o,o.exports,n),o.l=!0,o.exports}n.m=e,n.c=t,n.d=function(e,t,r){n.o(e,t)||Object.defineProperty(e,t,{enumerable:!0,get:r})},n.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},n.t=function(e,t){if(1&t&&(e=n(e)),8&t)return e;if(4&t&&"object"==typeof e&&e&&e.__esModule)return e;var r=Object.create(null);if(n.r(r),Object.defineProperty(r,"default",{enumerable:!0,value:e}),2&t&&"string"!=typeof e)for(var o in e)n.d(r,o,function(t){return e[t]}.bind(null,o));return r},n.n=function(e){var t=e&&e.__esModule?function(){return e.default}:function(){return e};return n.d(t,"a",t),t},n.o=function(e,t){return Object.prototype.hasOwnProperty.call(e,t)},n.p="/",n(n.s=6)}({6:function(e,t,n){e.exports=n("RFiP")},RFiP:function(e,t){function n(e,t,n){return t in e?Object.defineProperty(e,t,{value:n,enumerable:!0,configurable:!0,writable:!0}):e[t]=n,e}new function e(t){var r=this;!function(e,t){if(!(e instanceof t))throw new TypeError("Cannot call a class as a function")}(this,e),n(this,"setupStripe",(function(){return r.stripe=Stripe(r.key),r})),n(this,"handle",(function(){var e={type:"sofort",amount:document.querySelector('meta[name="amount"]').content,currency:"eur",redirect:{return_url:document.querySelector('meta[name="return-url"]').content},sofort:{country:document.querySelector('meta[name="country"').content}};document.getElementById("pay-now").addEventListener("click",(function(t){document.getElementById("pay-now-button").disabled=!0,document.querySelector("#pay-now-button > svg").classList.remove("hidden"),document.querySelector("#pay-now-button > span").classList.add("hidden"),r.stripe.createSource(e).then((function(e){if(e.hasOwnProperty("source"))return window.location=e.source.redirect.url;document.getElementById("pay-now-button").disabled=!1,document.querySelector("#pay-now-button > svg").classList.add("hidden"),document.querySelector("#pay-now-button > span").classList.remove("hidden"),this.errors.textContent="",this.errors.textContent=e.error.message,this.errors.hidden=!1,document.getElementById("pay-now").disabled=!1}))}))})),this.key=t,this.errors=document.getElementById("errors")}(document.querySelector('meta[name="stripe-publishable-key"]').content).setupStripe().handle()}});
+/******/ (() => { // webpackBootstrap
+var __webpack_exports__ = {};
+/*!********************************************************!*\
+  !*** ./resources/js/clients/payments/stripe-sofort.js ***!
+  \********************************************************/
+var _document$querySelect, _document$querySelect2, _document$querySelect3, _document$querySelect4;
+function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
+function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, _toPropertyKey(descriptor.key), descriptor); } }
+function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); Object.defineProperty(Constructor, "prototype", { writable: false }); return Constructor; }
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+function _defineProperty(obj, key, value) { key = _toPropertyKey(key); if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return _typeof(key) === "symbol" ? key : String(key); }
+function _toPrimitive(input, hint) { if (_typeof(input) !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (_typeof(res) !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
+/**
+ * Invoice Ninja (https://invoiceninja.com)
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license 
+ */
+var ProcessSOFORT = /*#__PURE__*/_createClass(function ProcessSOFORT(key, stripeConnect) {
+  var _this = this;
+  _classCallCheck(this, ProcessSOFORT);
+  _defineProperty(this, "setupStripe", function () {
+    if (_this.stripeConnect) {
+      // this.stripe.stripeAccount = this.stripeConnect;
+
+      _this.stripe = Stripe(_this.key, {
+        stripeAccount: _this.stripeConnect
+      });
+    } else {
+      _this.stripe = Stripe(_this.key);
+    }
+    return _this;
+  });
+  _defineProperty(this, "handle", function () {
+    document.getElementById('pay-now').addEventListener('click', function (e) {
+      document.getElementById('pay-now').disabled = true;
+      document.querySelector('#pay-now > svg').classList.remove('hidden');
+      document.querySelector('#pay-now > span').classList.add('hidden');
+      _this.stripe.confirmSofortPayment(document.querySelector('meta[name=pi-client-secret').content, {
+        payment_method: {
+          sofort: {
+            country: document.querySelector('meta[name="country"]').content
+          }
+        },
+        return_url: document.querySelector('meta[name="return-url"]').content
+      });
+    });
+  });
+  this.key = key;
+  this.errors = document.getElementById('errors');
+  this.stripeConnect = stripeConnect;
+});
+var publishableKey = (_document$querySelect = (_document$querySelect2 = document.querySelector('meta[name="stripe-publishable-key"]')) === null || _document$querySelect2 === void 0 ? void 0 : _document$querySelect2.content) !== null && _document$querySelect !== void 0 ? _document$querySelect : '';
+var stripeConnect = (_document$querySelect3 = (_document$querySelect4 = document.querySelector('meta[name="stripe-account-id"]')) === null || _document$querySelect4 === void 0 ? void 0 : _document$querySelect4.content) !== null && _document$querySelect3 !== void 0 ? _document$querySelect3 : '';
+new ProcessSOFORT(publishableKey, stripeConnect).setupStripe().handle();
+/******/ })()
+;

@@ -10,9 +10,15 @@
         "CRM",
         "Credit card billing",
         "projects",
-        "tasks"
+        "tasks",
+        "freelancer",
+        "quotes",
+        "purchase orders",
+        "stripe billing",
+        "invoices",
+        "subscriptions"
     ],
-    "license": "Attribution Assurance License",
+    "license": "Elastic License",
     "authors": [
         {
             "name": "Hillel Coren",
@@ -25,58 +31,110 @@
     ],
     "type": "project",
     "require": {
-        "php": ">=7.3",
+        "php": "^8.2|^8.3|^8.4|^8.5",
+        "ext-bcmath": "*",
+        "ext-curl": "*",
+        "ext-dom": "*",
         "ext-json": "*",
-        "asgrim/ofxparser": "^1.2",
+        "ext-libxml": "*",
+        "ext-simplexml": "*",
         "authorizenet/authorizenet": "^2.0",
-        "checkout/checkout-sdk-php": "^1.0",
-        "cleverit/ubl_invoice": "^1.3",
-        "composer/composer": "^2",
-        "czproject/git-php": "^3.17",
-        "doctrine/dbal": "^2.10",
-        "fedeisas/laravel-mail-css-inliner": "^3",
-        "fideloper/proxy": "^4.2",
-        "fzaninotto/faker": "^1.4",
-        "google/apiclient": "^2.7",
-        "guzzlehttp/guzzle": "^7.0.1",
-        "hashids/hashids": "^3.0",
+        "awobaz/compoships": "^2.1",
+        "aws/aws-sdk-php": "^3.319",
+        "babenkoivan/elastic-migrations": "^4.0|^5.0",
+        "babenkoivan/elastic-scout-driver": "^4.0",
+        "babenkoivan/elastic-scout-driver-plus": "^5.1",
+        "bacon/bacon-qr-code": "^3.0",
+        "beganovich/snappdf": "dev-master",
+        "braintree/braintree_php": "^6.28",
+        "btcpayserver/btcpayserver-greenfield-php": "^2.6",
+        "checkout/checkout-sdk-php": "^3.0",
+        "endroid/qr-code": "^5",
+        "eway/eway-rapid-php": "^2.0",
+        "fakerphp/faker": "^1.14",
+        "getbrevo/brevo-php": "^1.0",
+        "gocardless/gocardless-pro": "^8.1",
+        "google/apiclient": "^2.18",
+        "guzzlehttp/guzzle": "^7.2",
+        "halaxa/json-machine": "^0.7.0",
+        "hashids/hashids": "^4.0",
+        "hedii/laravel-gelf-logger": "^10",
+        "horstoeko/orderx": "^1",
+        "horstoeko/zugferd": "^1",
+        "horstoeko/zugferdvisualizer": "^1",
+        "hyvor/php-json-exporter": "^0.0.3",
+        "imdhemy/laravel-purchases": "^1.7",
         "intervention/image": "^2.5",
+        "invoiceninja/einvoice": "dev-main",
+        "invoiceninja/ubl_invoice": "^3",
+        "josemmo/facturae-php": "^1.7",
         "laracasts/presenter": "^0.2.1",
-        "laravel/framework": "^8.0",
-        "laravel/slack-notification-channel": "^2.2",
+        "laravel/framework": "^12",
+        "laravel/octane": "^2.6",
+        "laravel/scout": "^10.11",
+        "laravel/slack-notification-channel": "^3",
         "laravel/socialite": "^5",
-        "laravel/tinker": "^2.0",
-        "laravel/ui": "^3.0",
-        "league/flysystem-aws-s3-v3": "~1.0",
-        "league/flysystem-cached-adapter": "^1.1",
-        "league/fractal": "^0.17.0",
-        "league/omnipay": "^3.0",
-        "livewire/livewire": "^1.3",
-        "maennchen/zipstream-php": "^1.2",
-        "nwidart/laravel-modules": "^6.0",
-        "omnipay/paypal": "^3.0",
-        "predis/predis": "^1.1",
-        "sentry/sentry-laravel": "^2",
-        "spatie/browsershot": "^3.37",
-        "stripe/stripe-php": "^7.50",
-        "turbo124/beacon": "^1",
-        "turbo124/laravel-gmail": "^5.0",
-        "webpatser/laravel-countries": "dev-master#75992ad"
+        "laravel/tinker": "^2.7",
+        "laravel/ui": "^4.0",
+        "lbuchs/webauthn": "^2.2",
+        "league/csv": "^9.6",
+        "league/flysystem-aws-s3-v3": "^3.0",
+        "league/fractal": "^0.21",
+        "livewire/livewire": "^3",
+        "mailgun/mailgun-php": "^4.0",
+        "microsoft/microsoft-graph": "^1.69",
+        "mindee/mindee": "^1.8",
+        "mollie/mollie-api-php": "^2.36",
+        "nelexa/zip": "^4.0",
+        "nordigen/nordigen-php": "^1.1",
+        "nwidart/laravel-modules": "^12.0",
+        "payfast/payfast-php-sdk": "^1.1",
+        "phpoffice/phpspreadsheet": "^2.2",
+        "pragmarx/google2fa": "^8.0",
+        "predis/predis": "^2",
+        "propaganistas/laravel-disposable-email": "^2.5",
+        "psr/http-message": "^1.0",
+        "pusher/pusher-php-server": "^7.2",
+        "quickbooks/v3-php-sdk": "^6.2",
+        "razorpay/razorpay": "2.*",
+        "robrichards/xmlseclibs": "^3.1",
+        "sentry/sentry-laravel": "^4",
+        "setasign/fpdf": "^1.8",
+        "setasign/fpdi": "^2.6",
+        "socialiteproviders/apple": "^5",
+        "socialiteproviders/microsoft": "^4.1",
+        "sprain/swiss-qr-bill": "^5.2",
+        "square/square": "30.0.0.*",
+        "stripe/stripe-php": "^17",
+        "symfony/brevo-mailer": "^7.2",
+        "symfony/http-client": "^7.2",
+        "symfony/mailer": "^7.2",
+        "symfony/mailgun-mailer": "^7.2",
+        "symfony/postmark-mailer": "^7.2",
+        "turbo124/beacon": "^3.1",
+        "twig/extra-bundle": "^3.18",
+        "twig/intl-extra": "^3.7",
+        "twig/markdown-extra": "^3.18",
+        "twig/twig": "^3.14",
+        "twilio/sdk": "^6.40",
+        "wikimedia/composer-merge-plugin": "^2.1",
+        "wildbit/postmark-php": "^4.0"
     },
     "require-dev": {
-        "anahkiasen/former": "^4.2",
-        "barryvdh/laravel-debugbar": "^3.4",
-        "brianium/paratest": "^5.0",
-        "darkaonline/l5-swagger": "^8.0",
-        "facade/ignition": "^2.3.6",
+        "barryvdh/laravel-debugbar": "^4.0",
+        "barryvdh/laravel-ide-helper": "^3.0",
+        "brianium/paratest": "^7",
         "filp/whoops": "^2.7",
-        "friendsofphp/php-cs-fixer": "^2.16",
-        "fzaninotto/faker": "^1.9.1",
-        "mockery/mockery": "^1.3.1",
-        "nunomaduro/collision": "^5.0",
-        "phpunit/phpunit": "^9.0",
-        "vimeo/psalm": "^4.0",
-        "wildbit/postmark-php": "^4.0"
+        "friendsofphp/php-cs-fixer": "^3.14",
+        "laracasts/cypress": "^3.0",
+        "larastan/larastan": "^2|^3",
+        "laravel/boost": "^2",
+        "mockery/mockery": "^1.4.4",
+        "nunomaduro/collision": "^8.1",
+        "phpstan/phpstan": "^2.0",
+        "phpunit/phpunit": "^11|^12",
+        "spatie/laravel-ignition": "^2.0",
+        "spaze/phpstan-stripe": "^3.0|^4.0"
     },
     "autoload": {
         "psr-4": {
@@ -85,8 +143,11 @@
             "Database\\Seeders\\": "database/seeders/"
         },
         "files": [
-            "app/Libraries/OFX.php"
-        ]
+            "app/Helpers/TranslationHelper.php",
+            "app/Helpers/Generic.php",
+            "app/Helpers/ClientPortal.php"
+        ],
+        "classmap": []
     },
     "autoload-dev": {
         "psr-4": {
@@ -96,9 +157,33 @@
     "extra": {
         "laravel": {
             "dont-discover": []
-        }
+        },
+        "merge-plugin": {
+            "include": [
+                "Modules/*/composer.json"
+            ],
+            "recurse": true,
+            "replace": false,
+            "ignore-duplicates": false,
+            "merge-dev": true,
+            "merge-extra": false,
+            "merge-extra-deep": false,
+            "merge-replace": true,
+            "merge-scripts": false
+        },
+        "google/apiclient-services": [
+            "Gmail",
+            "Oauth2"
+        ]
     },
     "scripts": {
+        "post-install-cmd": [
+            "Google\\Task\\Composer::cleanup"
+        ],
+        "post-update-cmd": [
+            "Google\\Task\\Composer::cleanup",
+            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
+        ],
         "post-root-package-install": [
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
         ],
@@ -113,13 +198,39 @@
         ],
         "format": [
             "vendor/bin/php-cs-fixer fix"
-        ]
+        ],
+        "update-snapshots": "./phpunit --no-coverage -d --update-snapshots",
+        "lint": "pint",
+        "test": "phpunit",
+        "test-coverage": "phpunit --coverage-html coverage",
+        "pcf": "vendor/bin/php-cs-fixer fix --verbose"
     },
     "config": {
+        "platform": {
+            "php": "8.2.0"
+        },
         "preferred-install": "dist",
         "sort-packages": true,
-        "optimize-autoloader": true
+        "optimize-autoloader": true,
+        "allow-plugins": {
+            "php-http/discovery": true,
+            "wikimedia/composer-merge-plugin": true
+        }
     },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/invoiceninja/einvoice"
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/turbo124/snappdf"
+        },
+        {
+            "type": "path",
+            "url": "../admin-api"
+        }
+    ],
     "minimum-stability": "dev",
     "prefer-stable": true
 }

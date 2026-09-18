@@ -5,13 +5,12 @@
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "The leading open-source invoicing app",
+    "description": "Invoice Clients, Track Work-Time, Get Paid Online.",
     "orientation": "portrait-primary",
     "prefer_related_applications": true,
     "related_applications": [
         {
             "platform": "play",
-            "url": "https://play.google.com/store/apps/details?id=com.invoiceninja.app",
             "id": "com.invoiceninja.app"
         }, {
             "platform": "itunes",

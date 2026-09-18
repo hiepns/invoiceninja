@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Controllers;
@@ -22,12 +23,15 @@ use App\Http\Requests\RecurringQuote\EditRecurringQuoteRequest;
 use App\Http\Requests\RecurringQuote\ShowRecurringQuoteRequest;
 use App\Http\Requests\RecurringQuote\StoreRecurringQuoteRequest;
 use App\Http\Requests\RecurringQuote\UpdateRecurringQuoteRequest;
+use App\Http\Requests\RecurringQuote\UploadRecurringQuoteRequest;
+use App\Models\Account;
 use App\Models\Quote;
 use App\Models\RecurringQuote;
 use App\Repositories\RecurringQuoteRepository;
 use App\Transformers\QuoteTransformer;
 use App\Transformers\RecurringQuoteTransformer;
 use App\Utils\Traits\MakesHash;
+use App\Utils\Traits\SavesDocuments;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -37,6 +41,7 @@ use Illuminate\Http\Response;
 class RecurringQuoteController extends BaseController
 {
     use MakesHash;
+    use SavesDocuments;
 
     protected $entity_type = RecurringQuote::class;
 
@@ -66,7 +71,7 @@ class RecurringQuoteController extends BaseController
      *
      * @param RecurringQuoteFilters $filters  The filters
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -77,8 +82,7 @@ class RecurringQuoteController extends BaseController
      *      description="Lists recurring_quotes, search and filters allow fine grained lists to be generated.
 
         Query parameters can be added to performed more fine grained filtering of the recurring_quotes, these are handled by the RecurringQuoteFilters class which defines the methods available",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -114,7 +118,7 @@ class RecurringQuoteController extends BaseController
      *
      * @param CreateRecurringQuoteRequest $request  The request
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -123,8 +127,7 @@ class RecurringQuoteController extends BaseController
      *      tags={"recurring_quotes"},
      *      summary="Gets a new blank RecurringQuote object",
      *      description="Returns a blank object with default values",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -150,7 +153,10 @@ class RecurringQuoteController extends BaseController
      */
     public function create(CreateRecurringQuoteRequest $request)
     {
-        $recurring_quote = RecurringQuoteFactory::create(auth()->user()->company()->id, auth()->user()->id);
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $recurring_quote = RecurringQuoteFactory::create($user->company()->id, $user->id);
 
         return $this->itemResponse($recurring_quote);
     }
@@ -160,7 +166,7 @@ class RecurringQuoteController extends BaseController
      *
      * @param StoreRecurringQuoteRequest $request  The request
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Post(
@@ -169,8 +175,7 @@ class RecurringQuoteController extends BaseController
      *      tags={"recurring_quotes"},
      *      summary="Adds a RecurringQuote",
      *      description="Adds an RecurringQuote to the system",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Response(
@@ -196,7 +201,10 @@ class RecurringQuoteController extends BaseController
      */
     public function store(StoreRecurringQuoteRequest $request)
     {
-        $recurring_quote = $this->recurring_quote_repo->save($request, RecurringQuoteFactory::create(auth()->user()->company()->id, auth()->user()->id));
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
+        $recurring_quote = $this->recurring_quote_repo->save($request, RecurringQuoteFactory::create($user->company()->id, $user->id));
 
         return $this->itemResponse($recurring_quote);
     }
@@ -207,7 +215,7 @@ class RecurringQuoteController extends BaseController
      * @param ShowRecurringQuoteRequest $request  The request
      * @param RecurringQuote $recurring_quote  The RecurringQuote
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -216,8 +224,7 @@ class RecurringQuoteController extends BaseController
      *      tags={"recurring_quotes"},
      *      summary="Shows an RecurringQuote",
      *      description="Displays an RecurringQuote by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -263,7 +270,7 @@ class RecurringQuoteController extends BaseController
      * @param EditRecurringQuoteRequest $request  The request
      * @param RecurringQuote $recurring_quote  The RecurringQuote
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Get(
@@ -272,8 +279,7 @@ class RecurringQuoteController extends BaseController
      *      tags={"recurring_quotes"},
      *      summary="Shows an RecurringQuote for editting",
      *      description="Displays an RecurringQuote by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -319,7 +325,7 @@ class RecurringQuoteController extends BaseController
      * @param UpdateRecurringQuoteRequest $request  The request
      * @param RecurringQuote $recurring_quote  The RecurringQuote
      *
-     * @return Response
+     * @return Response| \Illuminate\Http\JsonResponse
      *
      *
      * @OA\Put(
@@ -328,8 +334,7 @@ class RecurringQuoteController extends BaseController
      *      tags={"recurring_quotes"},
      *      summary="Updates an RecurringQuote",
      *      description="Handles the updating of an RecurringQuote by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -391,8 +396,7 @@ class RecurringQuoteController extends BaseController
      *      tags={"recurring_quotes"},
      *      summary="Deletes a RecurringQuote",
      *      description="Handles the deletion of an RecurringQuote by id",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -428,15 +432,15 @@ class RecurringQuoteController extends BaseController
      */
     public function destroy(DestroyRecurringQuoteRequest $request, RecurringQuote $recurring_quote)
     {
-        $recurring_quote->delete();
+        $this->recurring_quote_repo->delete($recurring_quote);
 
-        return response()->json([], 200);
+        return $this->itemResponse($recurring_quote->fresh());
     }
 
     /**
      * Perform bulk actions on the list view.
      *
-     * @return Collection
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
      *
      *
      * @OA\Post(
@@ -445,8 +449,7 @@ class RecurringQuoteController extends BaseController
      *      tags={"recurring_quotes"},
      *      summary="Performs bulk actions on an array of recurring_quotes",
      *      description="",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/index"),
      *      @OA\RequestBody(
@@ -487,19 +490,22 @@ class RecurringQuoteController extends BaseController
      */
     public function bulk()
     {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+
         $action = request()->input('action');
 
         $ids = request()->input('ids');
 
-        $recurring_quotes = RecurringQuote::withTrashed()->find($this->transformKeys($ids));
+        $recurring_quotes = RecurringQuote::withTrashed()->company()->find($this->transformKeys($ids));
 
-        $recurring_quotes->each(function ($recurring_quote, $key) use ($action) {
-            if (auth()->user()->can('edit', $recurring_quote)) {
+        $recurring_quotes->each(function ($recurring_quote, $key) use ($action, $user) {
+            if ($user->can('edit', $recurring_quote)) {
                 $this->recurring_quote_repo->{$action}($recurring_quote);
             }
         });
 
-        return $this->listResponse(RecurringQuote::withTrashed()->whereIn('id', $this->transformKeys($ids)));
+        return $this->listResponse(RecurringQuote::withTrashed()->company()->whereIn('id', $this->transformKeys($ids)));
     }
 
     /**
@@ -524,8 +530,7 @@ class RecurringQuoteController extends BaseController
     - archive
     - delete
     - email",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\Parameter(ref="#/components/parameters/include"),
      *      @OA\Parameter(
@@ -577,16 +582,16 @@ class RecurringQuoteController extends BaseController
     public function action(ActionRecurringQuoteRequest $request, RecurringQuote $recurring_quote, $action)
     {
         switch ($action) {
-            case 'clone_to_RecurringQuote':
-          //      $recurring_invoice = CloneRecurringQuoteFactory::create($recurring_invoice, auth()->user()->id);
-          //      return $this->itemResponse($recurring_invoice);
+            case 'clone_to_recurring_quote':
+                //      $recurring_invoice = CloneRecurringQuoteFactory::create($recurring_invoice, auth()->user()->id);
+                //      return $this->itemResponse($recurring_invoice);
                 break;
             case 'clone_to_quote':
-                $quote = CloneRecurringQuoteToQuoteFactory::create($recurring_invoice, auth()->user()->id);
-                $this->entity_transformer = QuoteTransformer::class;
-                $this->entity_type = Quote::class;
+                // $quote = CloneRecurringQuoteToQuoteFactory::create($recurring_invoice, auth()->user()->id);
+                // $this->entity_transformer = QuoteTransformer::class;
+                // $this->entity_type = Quote::class;
 
-                return $this->itemResponse($quote);
+                // return $this->itemResponse($quote);
                 break;
             case 'history':
                 // code...
@@ -611,5 +616,18 @@ class RecurringQuoteController extends BaseController
                 // code...
                 break;
         }
+    }
+
+    public function upload(UploadRecurringQuoteRequest $request, RecurringQuote $recurring_quote)
+    {
+        if (! $this->checkFeature(Account::FEATURE_DOCUMENTS)) {
+            return $this->featureFailure();
+        }
+
+        if ($request->has('documents')) {
+            $this->saveDocuments($request->file('documents'), $recurring_quote, $request->has('is_public') ? $request->boolean('is_public') : null);
+        }
+
+        return $this->itemResponse($recurring_quote->fresh());
     }
 }

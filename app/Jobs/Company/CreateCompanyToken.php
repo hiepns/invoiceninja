@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Jobs\Company;
@@ -23,7 +24,10 @@ use Illuminate\Support\Str;
 
 class CreateCompanyToken implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     protected $company;
 
@@ -52,15 +56,15 @@ class CreateCompanyToken implements ShouldQueue
      *
      * @return CompanyToken|null
      */
-    public function handle() : ?CompanyToken
+    public function handle(): ?CompanyToken
     {
-        $this->custom_token_name = $this->custom_token_name ?: $this->user->first_name.' '.$this->user->last_name;
+        $this->custom_token_name = $this->custom_token_name ?: $this->user->first_name . ' ' . $this->user->last_name;
 
-        $company_token = new CompanyToken;
+        $company_token = new CompanyToken();
         $company_token->user_id = $this->user->id;
         $company_token->company_id = $this->company->id;
         $company_token->account_id = $this->user->account->id;
-        $company_token->name = $this->custom_token_name ?: $this->user->first_name.' '.$this->user->last_name;
+        $company_token->name = $this->custom_token_name ?: $this->user->first_name . ' ' . $this->user->last_name;
         $company_token->token = Str::random(64);
         $company_token->is_system = true;
 

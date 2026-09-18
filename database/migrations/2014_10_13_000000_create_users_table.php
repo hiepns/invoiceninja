@@ -4,19 +4,17 @@
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
-
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-class CreateUsersTable extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      *
@@ -24,8 +22,8 @@ class CreateUsersTable extends Migration
      */
     public function up()
     {
-        DB::raw('SET GLOBAL innodb_file_per_table=1;');
-        DB::raw('SET GLOBAL innodb_file_format=Barracuda;');
+        DB::raw('SET GLOBAL innodb_file_per_table=1;')->getValue(DB::connection()->getQueryGrammar());
+        DB::raw('SET GLOBAL innodb_file_format=Barracuda;')->getValue(DB::connection()->getQueryGrammar());
 
         Schema::create('languages', function ($table) {
             $table->increments('id');
@@ -50,8 +48,8 @@ class CreateUsersTable extends Migration
             $table->boolean('eea')->default(0);
             $table->boolean('swap_postal_code')->default(0);
             $table->boolean('swap_currency_symbol')->default(false);
-            $table->string('thousand_separator')->nullable();
-            $table->string('decimal_separator')->nullable();
+            $table->string('thousand_separator')->nullable()->default('');
+            $table->string('decimal_separator')->nullable()->default('');
         });
 
         Schema::create('payment_types', function ($table) {
@@ -478,10 +476,10 @@ class CreateUsersTable extends Migration
             $t->string('custom_value4')->nullable();
             $t->datetime('next_send_date')->nullable();
 
-            $t->string('custom_surcharge1')->nullable();
-            $t->string('custom_surcharge2')->nullable();
-            $t->string('custom_surcharge3')->nullable();
-            $t->string('custom_surcharge4')->nullable();
+            $t->decimal('custom_surcharge1', 20, 6)->nullable();
+            $t->decimal('custom_surcharge2', 20, 6)->nullable();
+            $t->decimal('custom_surcharge3', 20, 6)->nullable();
+            $t->decimal('custom_surcharge4', 20, 6)->nullable();
             $t->boolean('custom_surcharge_tax1')->default(false);
             $t->boolean('custom_surcharge_tax2')->default(false);
             $t->boolean('custom_surcharge_tax3')->default(false);
@@ -556,10 +554,10 @@ class CreateUsersTable extends Migration
             $t->string('custom_value4')->nullable();
             $t->datetime('next_send_date')->nullable();
 
-            $t->string('custom_surcharge1')->nullable();
-            $t->string('custom_surcharge2')->nullable();
-            $t->string('custom_surcharge3')->nullable();
-            $t->string('custom_surcharge4')->nullable();
+            $t->decimal('custom_surcharge1', 20, 6)->nullable();
+            $t->decimal('custom_surcharge2', 20, 6)->nullable();
+            $t->decimal('custom_surcharge3', 20, 6)->nullable();
+            $t->decimal('custom_surcharge4', 20, 6)->nullable();
             $t->boolean('custom_surcharge_tax1')->default(false);
             $t->boolean('custom_surcharge_tax2')->default(false);
             $t->boolean('custom_surcharge_tax3')->default(false);
@@ -592,7 +590,7 @@ class CreateUsersTable extends Migration
             $t->unsignedInteger('credit_id')->index();
             $t->string('key')->index();
             $t->string('transaction_reference')->nullable();
-            $t->string('message_id')->nullable();
+            $t->string('message_id')->nullable()->index();
             $t->mediumText('email_error')->nullable();
             $t->text('signature_base64')->nullable();
             $t->datetime('signature_date')->nullable();
@@ -609,7 +607,7 @@ class CreateUsersTable extends Migration
             $t->timestamps(6);
             $t->softDeletes('deleted_at', 6);
 
-            $t->index(['deleted_at', 'credit_id', 'company_id']);
+            $t->index(['credit_id', 'deleted_at']);
             $t->unique(['client_contact_id', 'credit_id']);
         });
 
@@ -623,7 +621,7 @@ class CreateUsersTable extends Migration
             $t->unsignedInteger('vendor_id')->nullable();
 
             $t->unsignedInteger('status_id')->index();
-            $t->text('number')->nullable();
+            $t->string('number')->nullable();
 
             $t->float('discount')->default(0);
             $t->boolean('is_amount_discount')->default(false);
@@ -672,6 +670,7 @@ class CreateUsersTable extends Migration
             $t->softDeletes('deleted_at', 6);
             $t->index(['company_id', 'deleted_at']);
 
+            $t->unique(['company_id', 'number']);
             $t->foreign('client_id')->references('id')->on('clients')->onDelete('cascade')->onUpdate('cascade');
             $t->foreign('company_id')->references('id')->on('companies')->onDelete('cascade')->onUpdate('cascade');
             $t->foreign('user_id')->references('id')->on('users')->onDelete('cascade')->onUpdate('cascade');
@@ -792,10 +791,10 @@ class CreateUsersTable extends Migration
             $t->string('custom_value3')->nullable();
             $t->string('custom_value4')->nullable();
 
-            $t->string('custom_surcharge1')->nullable();
-            $t->string('custom_surcharge2')->nullable();
-            $t->string('custom_surcharge3')->nullable();
-            $t->string('custom_surcharge4')->nullable();
+            $t->decimal('custom_surcharge1', 20, 6)->nullable();
+            $t->decimal('custom_surcharge2', 20, 6)->nullable();
+            $t->decimal('custom_surcharge3', 20, 6)->nullable();
+            $t->decimal('custom_surcharge4', 20, 6)->nullable();
             $t->boolean('custom_surcharge_tax1')->default(false);
             $t->boolean('custom_surcharge_tax2')->default(false);
             $t->boolean('custom_surcharge_tax3')->default(false);
@@ -828,7 +827,7 @@ class CreateUsersTable extends Migration
             $t->unsignedInteger('invoice_id')->index();
             $t->string('key')->index();
             $t->string('transaction_reference')->nullable();
-            $t->string('message_id')->nullable();
+            $t->string('message_id')->nullable()->index();
             $t->mediumText('email_error')->nullable();
             $t->text('signature_base64')->nullable();
             $t->datetime('signature_date')->nullable();
@@ -845,7 +844,7 @@ class CreateUsersTable extends Migration
             $t->timestamps(6);
             $t->softDeletes('deleted_at', 6);
 
-            $t->index(['deleted_at', 'invoice_id', 'company_id']);
+            $t->index(['invoice_id', 'company_id']);
             $t->unique(['client_contact_id', 'invoice_id']);
         });
 
@@ -857,7 +856,7 @@ class CreateUsersTable extends Migration
             $t->unsignedInteger('quote_id')->index();
             $t->string('key')->index();
             $t->string('transaction_reference')->nullable();
-            $t->string('message_id')->nullable();
+            $t->string('message_id')->nullable()->index();
             $t->mediumText('email_error')->nullable();
             $t->text('signature_base64')->nullable();
             $t->datetime('signature_date')->nullable();
@@ -874,7 +873,7 @@ class CreateUsersTable extends Migration
             $t->timestamps(6);
             $t->softDeletes('deleted_at', 6);
 
-            $t->index(['deleted_at', 'quote_id', 'company_id']);
+            $t->index(['quote_id', 'deleted_at']);
             $t->unique(['client_contact_id', 'quote_id']);
         });
 
@@ -960,7 +959,7 @@ class CreateUsersTable extends Migration
             $t->unsignedInteger('exchange_currency_id');
 
             $t->index(['company_id', 'deleted_at']);
-
+            $t->unique(['company_id', 'number']);
             $t->foreign('company_id')->references('id')->on('companies')->onDelete('cascade')->onUpdate('cascade');
             $t->foreign('client_id')->references('id')->on('clients')->onDelete('cascade')->onUpdate('cascade');
             $t->foreign('client_contact_id')->references('id')->on('client_contacts')->onDelete('cascade')->onUpdate('cascade');
@@ -1249,7 +1248,6 @@ class CreateUsersTable extends Migration
             $table->foreign('company_id')->references('id')->on('companies')->onDelete('cascade')->onUpdate('cascade');
         });
 
-
         Schema::create('expense_categories', function ($table) {
             $table->increments('id');
             $table->unsignedInteger('user_id');
@@ -1396,4 +1394,4 @@ class CreateUsersTable extends Migration
     public function down()
     {
     }
-}
+};

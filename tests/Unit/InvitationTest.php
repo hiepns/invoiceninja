@@ -1,27 +1,33 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2021. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
+
 namespace Tests\Unit;
 
-use App\Factory\InvoiceInvitationFactory;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
-use Illuminate\Routing\Middleware\ThrottleRequests;
-use Tests\MockAccountData;
 use Tests\TestCase;
+use Tests\MockAccountData;
+use App\Utils\Traits\MakesHash;
+use Illuminate\Database\Eloquent\Model;
+use App\Factory\InvoiceInvitationFactory;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 
 class InvitationTest extends TestCase
 {
     use MockAccountData;
     use DatabaseTransactions;
+    use MakesHash;
 
-    public function setUp() :void
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -30,6 +36,10 @@ class InvitationTest extends TestCase
         $this->withoutMiddleware(
             ThrottleRequests::class
         );
+
+        $this->withoutExceptionHandling();
+
+        Model::reguard();
     }
 
     public function testInvitationSanity()
@@ -42,19 +52,28 @@ class InvitationTest extends TestCase
             return $invitation->contact->is_primary == false;
         })->toArray();
 
+        $this->assertEquals(1, count($invites));
+
+        /** @phpstan-ignore-next-line **/
         $this->invoice->invitations = $invites;
 
         $this->invoice->line_items = [];
 
+        $response = null;
+
+        $data = $this->invoice->toArray();
+        unset($data['hashed_id']);
+
         $response = $this->withHeaders([
             'X-API-SECRET' => config('ninja.api_secret'),
             'X-API-TOKEN' => $this->token,
-        ])->put('/api/v1/invoices/'.$this->encodePrimaryKey($this->invoice->id), $this->invoice->toArray())
-        ->assertStatus(200);
+        ])->putJson('/api/v1/invoices/'.$this->invoice->hashed_id, $data);
+
+        $response->assertStatus(200);
 
         $arr = $response->json();
 
-        $this->assertEquals(1, count($arr['data']['invitations']));
+        $this->assertEquals(2, count($arr['data']['invitations']));
 
         //test pushing a contact invitation back on
 
@@ -62,18 +81,21 @@ class InvitationTest extends TestCase
 
         $new_invite = InvoiceInvitationFactory::create($this->invoice->company_id, $this->invoice->user_id);
         $new_invite->client_contact_id = $contact->hashed_id;
+        $new_invite->key = $this->createDbHash(config('database.default'));
 
         $invitations = $this->invoice->invitations()->get();
 
         $invitations->push($new_invite);
 
+        /** @phpstan-ignore-next-line **/
         $this->invoice->invitations = $invitations->toArray();
+
         $this->invoice->line_items = [];
 
         $response = $this->withHeaders([
             'X-API-SECRET' => config('ninja.api_secret'),
             'X-API-TOKEN' => $this->token,
-        ])->put('/api/v1/invoices/'.$this->encodePrimaryKey($this->invoice->id), $this->invoice->toArray())
+        ])->putJson('/api/v1/invoices/'.$this->encodePrimaryKey($this->invoice->id), $this->invoice->toArray())
         ->assertStatus(200);
 
         $arr = $response->json();

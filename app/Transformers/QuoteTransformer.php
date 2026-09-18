@@ -1,38 +1,59 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Transformers;
 
+use App\Models\Activity;
 use App\Models\Backup;
+use App\Models\Client;
 use App\Models\Document;
 use App\Models\Quote;
 use App\Models\QuoteInvitation;
 use App\Utils\Traits\MakesHash;
+use League\Fractal\Resource\Item;
 
 class QuoteTransformer extends EntityTransformer
 {
     use MakesHash;
 
-    protected $defaultIncludes = [
-            'invitations',
-            'documents',
-    ];
-
-    protected $availableIncludes = [
+    protected array $defaultIncludes = [
         'invitations',
         'documents',
-        'history',
-       //    'payments',
-    //    'client',
     ];
+
+    protected array $availableIncludes = [
+        'activities',
+        'client',
+        'location',
+    ];
+
+
+    public function includeLocation(Quote $quote)
+    {
+        $transformer = new LocationTransformer($this->serializer);
+
+        if (!$quote->location) {
+            return null;
+        }
+
+        return $this->includeItem($quote->location, $transformer, \App\Models\Location::class);
+    }
+
+    public function includeActivities(Quote $quote)
+    {
+        $transformer = new ActivityTransformer($this->serializer);
+
+        return $this->includeCollection($quote->activities, $transformer, Activity::class);
+    }
 
     public function includeHistory(Quote $quote)
     {
@@ -56,13 +77,6 @@ class QuoteTransformer extends EntityTransformer
             return $this->includeCollection($quote->payments, $transformer, ENTITY_PAYMENT);
         }
 
-        public function includeClient(quote $quote)
-        {
-            $transformer = new ClientTransformer($this->account, $this->serializer);
-
-            return $this->includeItem($quote->client, $transformer, ENTITY_CLIENT);
-        }
-
         public function includeExpenses(quote $quote)
         {
             $transformer = new ExpenseTransformer($this->account, $this->serializer);
@@ -78,6 +92,13 @@ class QuoteTransformer extends EntityTransformer
         return $this->includeCollection($quote->documents, $transformer, Document::class);
     }
 
+    public function includeClient(Quote $quote): Item
+    {
+        $transformer = new ClientTransformer($this->serializer);
+
+        return $this->includeItem($quote->client, $transformer, Client::class);
+    }
+
     public function transform(Quote $quote)
     {
         return [
@@ -90,6 +111,7 @@ class QuoteTransformer extends EntityTransformer
             'status_id' => (string) $quote->status_id,
             'design_id' => (string) $this->encodePrimaryKey($quote->design_id),
             'invoice_id' => (string) $this->encodePrimaryKey($quote->invoice_id),
+            'vendor_id' => (string) $this->encodePrimaryKey($quote->vendor_id),
             'updated_at' => (int) $quote->updated_at,
             'archived_at' => (int) $quote->deleted_at,
             'created_at' => (int) $quote->created_at,
@@ -98,12 +120,12 @@ class QuoteTransformer extends EntityTransformer
             'po_number' => $quote->po_number ?: '',
             'date' => $quote->date ?: '',
             'last_sent_date' => $quote->last_sent_date ?: '',
-            'next_send_date' => $quote->date ?: '',
+            'next_send_date' => $quote->next_send_date ?: '',
             'reminder1_sent' => $quote->reminder1_sent ?: '',
             'reminder2_sent' => $quote->reminder2_sent ?: '',
             'reminder3_sent' => $quote->reminder3_sent ?: '',
             'reminder_last_sent' => $quote->reminder_last_sent ?: '',
-            'due_date' => $quote->due_date ?: '',
+            'due_date' => $quote->due_date ? $quote->due_date->format('Y-m-d') : '',
             'terms' => $quote->terms ?: '',
             'public_notes' => $quote->public_notes ?: '',
             'private_notes' => $quote->private_notes ?: '',
@@ -119,7 +141,7 @@ class QuoteTransformer extends EntityTransformer
             'is_amount_discount' => (bool) ($quote->is_amount_discount ?: false),
             'footer' => $quote->footer ?: '',
             'partial' => (float) ($quote->partial ?: 0.0),
-            'partial_due_date' => $quote->partial_due_date ?: '',
+            'partial_due_date' => $quote->partial_due_date ? $quote->partial_due_date->format('Y-m-d') : '',
             'custom_value1' => (string) $quote->custom_value1 ?: '',
             'custom_value2' => (string) $quote->custom_value2 ?: '',
             'custom_value3' => (string) $quote->custom_value3 ?: '',
@@ -130,11 +152,21 @@ class QuoteTransformer extends EntityTransformer
             'custom_surcharge2' => (float) $quote->custom_surcharge2,
             'custom_surcharge3' => (float) $quote->custom_surcharge3,
             'custom_surcharge4' => (float) $quote->custom_surcharge4,
-            'custom_surcharge_taxes' => (bool) $quote->custom_surcharge_taxes,
+            'custom_surcharge_tax1' => (bool) $quote->custom_surcharge_tax1,
+            'custom_surcharge_tax2' => (bool) $quote->custom_surcharge_tax2,
+            'custom_surcharge_tax3' => (bool) $quote->custom_surcharge_tax3,
+            'custom_surcharge_tax4' => (bool) $quote->custom_surcharge_tax4,
             'line_items' => $quote->line_items ?: (array) [],
             'entity_type' => 'quote',
             'exchange_rate' => (float) $quote->exchange_rate,
+            'paid_to_date' => (float) $quote->paid_to_date,
             'project_id' => $this->encodePrimaryKey($quote->project_id),
+            'subscription_id' => $this->encodePrimaryKey($quote->subscription_id),
+            'tax_info' => $quote->tax_data ?: new \stdClass(),
+            'e_invoice' => $quote->e_invoice ?: new \stdClass(),
+            'location_id' => $this->encodePrimaryKey($quote->location_id),
+            'tags' => $this->transformTags($quote),
+            'sync' => $quote->sync,
         ];
     }
 }

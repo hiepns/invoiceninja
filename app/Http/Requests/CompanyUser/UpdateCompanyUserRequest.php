@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\Requests\CompanyUser;
@@ -23,13 +24,29 @@ class UpdateCompanyUserRequest extends Request
      *
      * @return bool
      */
-    public function authorize() : bool
+    public function authorize(): bool
     {
-        return auth()->user()->isAdmin() || (auth()->user()->id == $this->user->id);
+        /** @var \App\Models\User $auth_user */
+        $auth_user = auth()->user();
+
+        return $auth_user->isAdmin() || ($auth_user->id == $this->user->id);
     }
 
     public function rules()
     {
-        return [];
+        return [
+            'company_user' => 'required|array'
+        ];
+    }
+
+    public function prepareForValidation()
+    {
+        $input = $this->all();
+
+        if (isset($input['company_user']['user'])) {
+            unset($input['company_user']['user']);
+        }
+
+        $this->replace($input);
     }
 }

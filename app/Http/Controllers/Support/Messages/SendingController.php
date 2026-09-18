@@ -1,5 +1,13 @@
 <?php
-
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
 namespace App\Http\Controllers\Support\Messages;
 
 use App\Http\Controllers\Controller;
@@ -18,8 +26,7 @@ class SendingController extends Controller
      *      tags={"support"},
      *      summary="Sends a support message to Invoice Ninja team",
      *      description="Allows a user to send a support message to the Invoice Ninja Team",
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Secret"),
-     *      @OA\Parameter(ref="#/components/parameters/X-Api-Token"),
+     *      @OA\Parameter(ref="#/components/parameters/X-API-TOKEN"),
      *      @OA\Parameter(ref="#/components/parameters/X-Requested-With"),
      *      @OA\RequestBody(
      *         description="The message",
@@ -61,7 +68,7 @@ class SendingController extends Controller
      *       ),
      *     )
      * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\Response
      */
     public function __invoke(Request $request)
     {
@@ -76,7 +83,7 @@ class SendingController extends Controller
         }
 
         Mail::to(config('ninja.contact.ninja_official_contact'))
-            ->send(new SupportMessageSent($request->message, $send_logs));
+            ->send(new SupportMessageSent($request->all(), $send_logs));
 
         return response()->json([
             'success' => true,

@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Quote Ninja (https://quoteninja.com).
  *
  * @link https://github.com/quoteninja/quoteninja source repository
  *
- * @copyright Copyright (c) 2020. Quote Ninja LLC (https://quoteninja.com)
+ * @copyright Copyright (c) 2022. Quote Ninja LLC (https://quoteninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Http\ValidationRules\Quote;
@@ -41,15 +42,15 @@ class UniqueQuoteNumberRule implements Rule
      */
     public function message()
     {
-        return 'Quote number already taken';
+        return ctrans('texts.quote_number_taken');
     }
 
     /**
      * @return bool
      */
-    private function checkIfQuoteNumberUnique() : bool
+    private function checkIfQuoteNumberUnique(): bool
     {
-        $quote = Quote::where('client_id', $this->input['client_id'])
+        $quote = Quote::query()->where('client_id', $this->input['client_id'])
                         ->where('number', $this->input['number'])
                         ->withTrashed()
                         ->exists();

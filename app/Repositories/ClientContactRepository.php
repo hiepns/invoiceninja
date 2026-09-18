@@ -1,12 +1,13 @@
 <?php
+
 /**
  * Invoice Ninja (https://invoiceninja.com).
  *
  * @link https://github.com/invoiceninja/invoiceninja source repository
  *
- * @copyright Copyright (c) 2020. Invoice Ninja LLC (https://invoiceninja.com)
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
  *
- * @license https://opensource.org/licenses/AAL
+ * @license https://www.elastic.co/licensing/elastic-license
  */
 
 namespace App\Repositories;
@@ -22,12 +23,17 @@ use Illuminate\Support\Str;
  */
 class ClientContactRepository extends BaseRepository
 {
-    public $is_primary;
-    
-    public function save(array $data, Client $client) : void
+    private bool $is_primary = true;
+
+    public function save(array $data, Client $client): void
     {
-        if (isset($data['contacts'])) {
+        $this->is_primary = true;
+
+        if (isset($data['contacts']) && (count($data['contacts']) !== count($data['contacts'], COUNT_RECURSIVE))) {
             $contacts = collect($data['contacts']);
+        } elseif (isset($data['contacts'])) {
+            $temp_array[] = $data['contacts'];
+            $contacts = collect($temp_array);
         } else {
             $contacts = collect();
         }
@@ -36,15 +42,35 @@ class ClientContactRepository extends BaseRepository
             ClientContact::destroy($contact);
         });
 
-        $this->is_primary = true;
         /* Set first record to primary - always */
-        $contacts = $contacts->sortByDesc('is_primary')->map(function ($contact) {
+        $contacts = $contacts->sortByDesc('is_primary')->filter(function ($contact) {
+            return is_array($contact);
+        })->map(function ($contact) {
             $contact['is_primary'] = $this->is_primary;
+
+            if ($this->is_primary) {
+                /* The primary contact must always receive email and can never be CC-only. */
+                // $contact['send_email'] = true;
+                $contact['cc_only'] = false;
+            } elseif (filter_var($contact['cc_only'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                /* A non-primary CC-only contact never receives its own email. */
+                $contact['send_email'] = false;
+            }
+
             $this->is_primary = false;
 
             return $contact;
         });
 
+        if (! $contacts->contains(fn ($c) => filter_var($c['send_email'] ?? false, FILTER_VALIDATE_BOOLEAN))) {
+            $contacts = $contacts->map(function ($contact) {
+                if ($contact['is_primary']) {
+                    $contact['send_email'] = true;
+                }
+                return $contact;
+            });
+        }
+        
         //loop and update/create contacts
         $contacts->each(function ($contact) use ($client) {
             $update_contact = null;
@@ -55,28 +81,52 @@ class ClientContactRepository extends BaseRepository
 
             if (! $update_contact) {
                 $update_contact = ClientContactFactory::create($client->company_id, $client->user_id);
-                $update_contact->client_id = $client->id;
+            }
+
+            //10-09-2021 - enforce the client->id and remove client_id from fillables
+            $update_contact->client_id = $client->id;
+
+            /* We need to set NULL email addresses to blank strings to pass authentication*/
+            if (array_key_exists('email', $contact) && is_null($contact['email'])) {
+                $contact['email'] = '';
             }
 
             $update_contact->fill($contact);
 
-            if (array_key_exists('password', $contact) && strlen($contact['password']) > 1) {
+            if (array_key_exists('password', $contact) && strlen($contact['password'] ?? '') > 1 && strlen($update_contact->email ?? '') > 3) { //updating on a blank contact email will cause large table scanning
                 $update_contact->password = Hash::make($contact['password']);
+
+                ClientContact::withTrashed()
+                            ->where('company_id', $client->company_id)
+                            ->where('client_id', $client->id)
+                            ->where('email', $update_contact->email)->cursor()
+                                    ->each(function ($saveable_contact) use ($update_contact) {
+                                        $saveable_contact->password = $update_contact->password;
+                                        $saveable_contact->save();
+                                    });
+            }
+
+            if (array_key_exists('email', $contact)) {
+                $update_contact->email = trim($contact['email']);
             }
 
             $update_contact->save();
         });
 
         //need to reload here to shake off stale contacts
-        $client->load('contacts');
+        $client->fresh();
 
         //always made sure we have one blank contact to maintain state
-        if ($client->contacts->count() == 0) {
+        if ($client->contacts()->count() == 0) {
             $new_contact = ClientContactFactory::create($client->company_id, $client->user_id);
             $new_contact->client_id = $client->id;
             $new_contact->contact_key = Str::random(40);
             $new_contact->is_primary = true;
+            $new_contact->confirmed = true;
+            $new_contact->email = ' ';
             $new_contact->save();
         }
+
+        $client = null;
     }
 }

@@ -1,5 +1,13 @@
 <?php
-
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2026. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
 namespace App\Jobs\Ninja;
 
 use App\Models\Account;
@@ -13,7 +21,10 @@ use Illuminate\Support\Carbon;
 
 class RefundCancelledAccount implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     public $account;
 
@@ -41,7 +52,7 @@ class RefundCancelledAccount implements ShouldQueue
 
         $plan_details = $this->account->getPlanDetails();
 
-        if (!$plan_details) {
+        if (! $plan_details) {
             return;
         }
 
@@ -49,12 +60,11 @@ class RefundCancelledAccount implements ShouldQueue
         if ($plan_details['trial_plan']) {
             return;
         }
-        
+
         /* Is the plan Active? */
         if (! $plan_details['active']) {
             return;
         }
-        
 
         /* Refundable client! */
 
@@ -65,9 +75,6 @@ class RefundCancelledAccount implements ShouldQueue
 
         $refund = $this->calculateRefundAmount($paid, $plan_expires);
 
-        /* Are there any edge cases? */
-
-        //@TODO process refund by refunding directly to the payment_id;
     }
 
     private function calculateRefundAmount($amount, $plan_expires)
@@ -75,7 +82,7 @@ class RefundCancelledAccount implements ShouldQueue
         $end_date = Carbon::parse($plan_expires);
         $now = Carbon::now();
 
-        $days_left = $now->diffInDays($end_date);
+        $days_left = intval(abs($now->diffInDays($end_date)));
 
         $pro_rata_ratio = $days_left / 365;
 
